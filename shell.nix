@@ -46,6 +46,12 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
+    # Pin the AVD home so avdmanager, the emulator and the Flutter tool all
+    # agree regardless of XDG_CONFIG_HOME — otherwise AVDs scatter across
+    # config dirs and `flutter emulators` finds nothing. Needs shell
+    # expansion, so it cannot be a plain environment attribute.
+    export ANDROID_AVD_HOME="$HOME/.android/avd"
+    mkdir -p "$ANDROID_AVD_HOME"
     echo "FVM:     $(fvm --version 2>/dev/null | head -n 1)"
     echo "Flutter: $(fvm flutter --version | head -n 1)"
     echo "Java:    $(java -version 2>&1 | head -n 1)"
