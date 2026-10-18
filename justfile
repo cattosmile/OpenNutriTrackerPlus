@@ -164,6 +164,12 @@ start_emulator:
 dev:
   fvm flutter run --flavor develop
 
+# Run on the Waydroid container (near-native speed, host GPU, physical
+# keyboard). Requires: waydroid session start && waydroid show-full-ui
+dev_waydroid:
+  adb connect 192.168.240.112:5555
+  fvm flutter run --flavor develop -d 192.168.240.112:5555
+
 # Run with the active profile wiped and reseeded with demo data (skips onboarding)
 dev_seed:
   fvm flutter run --flavor develop -t lib/dev/main_dev.dart
