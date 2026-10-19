@@ -58,6 +58,49 @@ class MealNutrimentsDBO extends HiveObject {
   final double? vitaminB12100; // µg
   @HiveField(23)
   final double? niacin100; // mg (B3)
+  // Extended vitamin set
+  @HiveField(24)
+  final double? vitaminE100; // mg
+  @HiveField(25)
+  final double? vitaminK100; // µg
+  @HiveField(26)
+  final double? vitaminB1100; // mg (thiamine)
+  @HiveField(27)
+  final double? vitaminB2100; // mg (riboflavin)
+  @HiveField(28)
+  final double? vitaminB5100; // mg (pantothenic acid)
+  @HiveField(29)
+  final double? vitaminB7100; // µg (biotin)
+  @HiveField(30)
+  final double? vitaminB9100; // µg (folate)
+  @HiveField(31)
+  final double? choline100; // mg
+  // Trace elements and electrolyte
+  @HiveField(32)
+  final double? chloride100; // mg
+  @HiveField(33)
+  final double? copper100; // µg
+  @HiveField(34)
+  final double? manganese100; // mg
+  @HiveField(35)
+  final double? selenium100; // µg
+  @HiveField(36)
+  final double? iodine100; // µg
+  @HiveField(37)
+  final double? fluoride100; // mg
+  @HiveField(38)
+  final double? chromium100; // µg
+  @HiveField(39)
+  final double? molybdenum100; // µg
+  // Omega-3 fatty acids
+  @HiveField(40)
+  final double? ala100; // g
+  @HiveField(41)
+  final double? epa100; // g
+  @HiveField(42)
+  final double? dha100; // g
+  @HiveField(43)
+  final double? caffeine100; // mg
 
   MealNutrimentsDBO({
     required this.energyKcal100,
@@ -84,6 +127,26 @@ class MealNutrimentsDBO extends HiveObject {
     this.vitaminB6100,
     this.vitaminB12100,
     this.niacin100,
+    this.vitaminE100,
+    this.vitaminK100,
+    this.vitaminB1100,
+    this.vitaminB2100,
+    this.vitaminB5100,
+    this.vitaminB7100,
+    this.vitaminB9100,
+    this.choline100,
+    this.chloride100,
+    this.copper100,
+    this.manganese100,
+    this.selenium100,
+    this.iodine100,
+    this.fluoride100,
+    this.chromium100,
+    this.molybdenum100,
+    this.ala100,
+    this.epa100,
+    this.dha100,
+    this.caffeine100,
   });
 
   factory MealNutrimentsDBO.fromProductNutrimentsEntity(
@@ -114,6 +177,26 @@ class MealNutrimentsDBO extends HiveObject {
       vitaminB6100: nutriments.vitaminB6100,
       vitaminB12100: nutriments.vitaminB12100,
       niacin100: nutriments.niacin100,
+      vitaminE100: nutriments.vitaminE100,
+      vitaminK100: nutriments.vitaminK100,
+      vitaminB1100: nutriments.vitaminB1100,
+      vitaminB2100: nutriments.vitaminB2100,
+      vitaminB5100: nutriments.vitaminB5100,
+      vitaminB7100: nutriments.vitaminB7100,
+      vitaminB9100: nutriments.vitaminB9100,
+      choline100: nutriments.choline100,
+      chloride100: nutriments.chloride100,
+      copper100: nutriments.copper100,
+      manganese100: nutriments.manganese100,
+      selenium100: nutriments.selenium100,
+      iodine100: nutriments.iodine100,
+      fluoride100: nutriments.fluoride100,
+      chromium100: nutriments.chromium100,
+      molybdenum100: nutriments.molybdenum100,
+      ala100: nutriments.ala100,
+      epa100: nutriments.epa100,
+      dha100: nutriments.dha100,
+      caffeine100: nutriments.caffeine100,
     );
   }
 

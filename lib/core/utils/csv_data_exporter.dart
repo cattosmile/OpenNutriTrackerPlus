@@ -66,6 +66,26 @@ class CsvDataExporter {
     'vitamin_b6_per_100g',
     'vitamin_b12_per_100g',
     'niacin_per_100g',
+    'vitamin_e_per_100g',
+    'vitamin_k_per_100g',
+    'vitamin_b1_per_100g',
+    'vitamin_b2_per_100g',
+    'vitamin_b5_per_100g',
+    'vitamin_b7_per_100g',
+    'vitamin_b9_per_100g',
+    'choline_per_100g',
+    'chloride_per_100g',
+    'copper_per_100g',
+    'manganese_per_100g',
+    'selenium_per_100g',
+    'iodine_per_100g',
+    'fluoride_per_100g',
+    'chromium_per_100g',
+    'molybdenum_per_100g',
+    'ala_per_100g',
+    'epa_per_100g',
+    'dha_per_100g',
+    'caffeine_per_100g',
     // Appended last so an older CSV still parses. Mirrors
     // `MealDBO.dataVersion`: a row with `meal_source` of `off` and no value
     // here was written before #775 and holds its micronutrients in raw
@@ -154,6 +174,26 @@ class CsvDataExporter {
         _num(n.vitaminB6100),
         _num(n.vitaminB12100),
         _num(n.niacin100),
+        _num(n.vitaminE100),
+        _num(n.vitaminK100),
+        _num(n.vitaminB1100),
+        _num(n.vitaminB2100),
+        _num(n.vitaminB5100),
+        _num(n.vitaminB7100),
+        _num(n.vitaminB9100),
+        _num(n.choline100),
+        _num(n.chloride100),
+        _num(n.copper100),
+        _num(n.manganese100),
+        _num(n.selenium100),
+        _num(n.iodine100),
+        _num(n.fluoride100),
+        _num(n.chromium100),
+        _num(n.molybdenum100),
+        _num(n.ala100),
+        _num(n.epa100),
+        _num(n.dha100),
+        _num(n.caffeine100),
         _num(meal.dataVersion?.toDouble()),
       ];
       buf.writeln(cells.join(','));
@@ -253,6 +293,40 @@ class CsvDataExporter {
         vitaminB12100:
             CsvRowParser.parseDoubleOrNull(row['vitamin_b12_per_100g']),
         niacin100: CsvRowParser.parseDoubleOrNull(row['niacin_per_100g']),
+        vitaminE100:
+            CsvRowParser.parseDoubleOrNull(row['vitamin_e_per_100g']),
+        vitaminK100:
+            CsvRowParser.parseDoubleOrNull(row['vitamin_k_per_100g']),
+        vitaminB1100:
+            CsvRowParser.parseDoubleOrNull(row['vitamin_b1_per_100g']),
+        vitaminB2100:
+            CsvRowParser.parseDoubleOrNull(row['vitamin_b2_per_100g']),
+        vitaminB5100:
+            CsvRowParser.parseDoubleOrNull(row['vitamin_b5_per_100g']),
+        vitaminB7100:
+            CsvRowParser.parseDoubleOrNull(row['vitamin_b7_per_100g']),
+        vitaminB9100:
+            CsvRowParser.parseDoubleOrNull(row['vitamin_b9_per_100g']),
+        choline100: CsvRowParser.parseDoubleOrNull(row['choline_per_100g']),
+        chloride100:
+            CsvRowParser.parseDoubleOrNull(row['chloride_per_100g']),
+        copper100: CsvRowParser.parseDoubleOrNull(row['copper_per_100g']),
+        manganese100:
+            CsvRowParser.parseDoubleOrNull(row['manganese_per_100g']),
+        selenium100:
+            CsvRowParser.parseDoubleOrNull(row['selenium_per_100g']),
+        iodine100: CsvRowParser.parseDoubleOrNull(row['iodine_per_100g']),
+        fluoride100:
+            CsvRowParser.parseDoubleOrNull(row['fluoride_per_100g']),
+        chromium100:
+            CsvRowParser.parseDoubleOrNull(row['chromium_per_100g']),
+        molybdenum100:
+            CsvRowParser.parseDoubleOrNull(row['molybdenum_per_100g']),
+        ala100: CsvRowParser.parseDoubleOrNull(row['ala_per_100g']),
+        epa100: CsvRowParser.parseDoubleOrNull(row['epa_per_100g']),
+        dha100: CsvRowParser.parseDoubleOrNull(row['dha_per_100g']),
+        caffeine100:
+            CsvRowParser.parseDoubleOrNull(row['caffeine_per_100g']),
       );
       final meal = MealDBO(
         code: _nullable(row['meal_code']),

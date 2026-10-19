@@ -41,8 +41,9 @@ class _NutrientVisibilityScreenState extends State<NutrientVisibilityScreen> {
 
   Future<void> _toggle(String key, bool visible) async {
     setState(() => _visibility[key] = visible);
-    await locator<AddConfigUsecase>()
-        .setConfigNutrientPanelVisibility(_visibility);
+    await locator<AddConfigUsecase>().setConfigNutrientPanelVisibility(
+      _visibility,
+    );
   }
 
   String _labelFor(BuildContext context, String key) {
@@ -68,6 +69,56 @@ class _NutrientVisibilityScreenState extends State<NutrientVisibilityScreen> {
         return s.vitaminB12Label;
       case NutrientPanelKeys.magnesium:
         return s.magnesiumLabel;
+      case NutrientPanelKeys.zinc:
+        return s.zincLabel;
+      case NutrientPanelKeys.phosphorus:
+        return s.phosphorusLabel;
+      case NutrientPanelKeys.chloride:
+        return s.chlorideLabel;
+      case NutrientPanelKeys.vitaminA:
+        return s.vitaminALabel;
+      case NutrientPanelKeys.vitaminC:
+        return s.vitaminCLabel;
+      case NutrientPanelKeys.vitaminE:
+        return s.vitaminELabel;
+      case NutrientPanelKeys.vitaminK:
+        return s.vitaminKLabel;
+      case NutrientPanelKeys.vitaminB1:
+        return s.vitaminB1Label;
+      case NutrientPanelKeys.vitaminB2:
+        return s.vitaminB2Label;
+      case NutrientPanelKeys.niacin:
+        return s.niacinLabel;
+      case NutrientPanelKeys.vitaminB5:
+        return s.vitaminB5Label;
+      case NutrientPanelKeys.vitaminB6:
+        return s.vitaminB6Label;
+      case NutrientPanelKeys.vitaminB7:
+        return s.vitaminB7Label;
+      case NutrientPanelKeys.vitaminB9:
+        return s.vitaminB9Label;
+      case NutrientPanelKeys.choline:
+        return s.cholineLabel;
+      case NutrientPanelKeys.copper:
+        return s.copperLabel;
+      case NutrientPanelKeys.manganese:
+        return s.manganeseLabel;
+      case NutrientPanelKeys.selenium:
+        return s.seleniumLabel;
+      case NutrientPanelKeys.iodine:
+        return s.iodineLabel;
+      case NutrientPanelKeys.fluoride:
+        return s.fluorideLabel;
+      case NutrientPanelKeys.chromium:
+        return s.chromiumLabel;
+      case NutrientPanelKeys.molybdenum:
+        return s.molybdenumLabel;
+      case NutrientPanelKeys.ala:
+        return s.alaLabel;
+      case NutrientPanelKeys.epaDha:
+        return s.epaDhaLabel;
+      case NutrientPanelKeys.caffeine:
+        return s.caffeineLabel;
       default:
         return key;
     }
@@ -84,7 +135,9 @@ class _NutrientVisibilityScreenState extends State<NutrientVisibilityScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0, vertical: 8.0),
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
                   child: Text(
                     s.settingsNutrientsHelp,
                     style: Theme.of(context).textTheme.bodySmall,

@@ -36,6 +36,29 @@ class MealNutrimentsEntity extends Equatable {
   final double? vitaminB6100; // mg
   final double? vitaminB12100; // µg
   final double? niacin100; // mg (B3)
+  // Extended vitamin set (µg/mg as noted, same basis as above)
+  final double? vitaminE100; // mg
+  final double? vitaminK100; // µg
+  final double? vitaminB1100; // mg (thiamine)
+  final double? vitaminB2100; // mg (riboflavin)
+  final double? vitaminB5100; // mg (pantothenic acid)
+  final double? vitaminB7100; // µg (biotin)
+  final double? vitaminB9100; // µg (folate)
+  final double? choline100; // mg
+  // Trace elements and electrolyte
+  final double? chloride100; // mg
+  final double? copper100; // µg
+  final double? manganese100; // mg
+  final double? selenium100; // µg
+  final double? iodine100; // µg
+  final double? fluoride100; // mg
+  final double? chromium100; // µg
+  final double? molybdenum100; // µg
+  // Omega-3 fatty acids (grams, like the fat macros)
+  final double? ala100; // g (alpha-linolenic acid)
+  final double? epa100; // g
+  final double? dha100; // g
+  final double? caffeine100; // mg
 
   double? get energyPerUnit => _getValuePerUnit(energyKcal100);
 
@@ -46,7 +69,7 @@ class MealNutrimentsEntity extends Equatable {
   double? get proteinsPerUnit => _getValuePerUnit(proteins100);
 
   /// Returns true when at least one of the extended micronutrient fields
-  /// (lipid profile / minerals / vitamins from #237) has a value.
+  /// (lipid profile / minerals / vitamins / trace elements) has a value.
   bool get hasMicronutrientData =>
       monounsaturatedFat100 != null ||
       polyunsaturatedFat100 != null ||
@@ -64,7 +87,27 @@ class MealNutrimentsEntity extends Equatable {
       vitaminD100 != null ||
       vitaminB6100 != null ||
       vitaminB12100 != null ||
-      niacin100 != null;
+      niacin100 != null ||
+      vitaminE100 != null ||
+      vitaminK100 != null ||
+      vitaminB1100 != null ||
+      vitaminB2100 != null ||
+      vitaminB5100 != null ||
+      vitaminB7100 != null ||
+      vitaminB9100 != null ||
+      choline100 != null ||
+      chloride100 != null ||
+      copper100 != null ||
+      manganese100 != null ||
+      selenium100 != null ||
+      iodine100 != null ||
+      fluoride100 != null ||
+      chromium100 != null ||
+      molybdenum100 != null ||
+      ala100 != null ||
+      epa100 != null ||
+      dha100 != null ||
+      caffeine100 != null;
 
   const MealNutrimentsEntity({
     required this.energyKcal100,
@@ -91,17 +134,37 @@ class MealNutrimentsEntity extends Equatable {
     this.vitaminB6100,
     this.vitaminB12100,
     this.niacin100,
+    this.vitaminE100,
+    this.vitaminK100,
+    this.vitaminB1100,
+    this.vitaminB2100,
+    this.vitaminB5100,
+    this.vitaminB7100,
+    this.vitaminB9100,
+    this.choline100,
+    this.chloride100,
+    this.copper100,
+    this.manganese100,
+    this.selenium100,
+    this.iodine100,
+    this.fluoride100,
+    this.chromium100,
+    this.molybdenum100,
+    this.ala100,
+    this.epa100,
+    this.dha100,
+    this.caffeine100,
   });
 
   factory MealNutrimentsEntity.empty() => const MealNutrimentsEntity(
-        energyKcal100: null,
-        carbohydrates100: null,
-        fat100: null,
-        proteins100: null,
-        sugars100: null,
-        saturatedFat100: null,
-        fiber100: null,
-      );
+    energyKcal100: null,
+    carbohydrates100: null,
+    fat100: null,
+    proteins100: null,
+    sugars100: null,
+    saturatedFat100: null,
+    fiber100: null,
+  );
 
   /// Stored values that are NaN or infinite read back as null ("unknown").
   /// A custom meal saved with a base quantity of 0 was stored that way
@@ -137,6 +200,26 @@ class MealNutrimentsEntity extends Equatable {
       vitaminB6100: finite(nutriments.vitaminB6100),
       vitaminB12100: finite(nutriments.vitaminB12100),
       niacin100: finite(nutriments.niacin100),
+      vitaminE100: finite(nutriments.vitaminE100),
+      vitaminK100: finite(nutriments.vitaminK100),
+      vitaminB1100: finite(nutriments.vitaminB1100),
+      vitaminB2100: finite(nutriments.vitaminB2100),
+      vitaminB5100: finite(nutriments.vitaminB5100),
+      vitaminB7100: finite(nutriments.vitaminB7100),
+      vitaminB9100: finite(nutriments.vitaminB9100),
+      choline100: finite(nutriments.choline100),
+      chloride100: finite(nutriments.chloride100),
+      copper100: finite(nutriments.copper100),
+      manganese100: finite(nutriments.manganese100),
+      selenium100: finite(nutriments.selenium100),
+      iodine100: finite(nutriments.iodine100),
+      fluoride100: finite(nutriments.fluoride100),
+      chromium100: finite(nutriments.chromium100),
+      molybdenum100: finite(nutriments.molybdenum100),
+      ala100: finite(nutriments.ala100),
+      epa100: finite(nutriments.epa100),
+      dha100: finite(nutriments.dha100),
+      caffeine100: finite(nutriments.caffeine100),
     );
   }
 
@@ -149,22 +232,22 @@ class MealNutrimentsEntity extends Equatable {
     // 2. Extension function asDoubleOrNull does not work on a dynamic data
     // type, so cast to it Object?
     return MealNutrimentsEntity(
-      energyKcal100:
-          (offNutriments.energy_kcal_100g as Object?).asDoubleOrNull(),
-      carbohydrates100:
-          (offNutriments.carbohydrates_100g as Object?).asDoubleOrNull(),
+      energyKcal100: (offNutriments.energy_kcal_100g as Object?)
+          .asDoubleOrNull(),
+      carbohydrates100: (offNutriments.carbohydrates_100g as Object?)
+          .asDoubleOrNull(),
       fat100: (offNutriments.fat_100g as Object?).asDoubleOrNull(),
       proteins100: (offNutriments.proteins_100g as Object?).asDoubleOrNull(),
       sugars100: (offNutriments.sugars_100g as Object?).asDoubleOrNull(),
-      saturatedFat100:
-          (offNutriments.saturated_fat_100g as Object?).asDoubleOrNull(),
+      saturatedFat100: (offNutriments.saturated_fat_100g as Object?)
+          .asDoubleOrNull(),
       fiber100: (offNutriments.fiber_100g as Object?).asDoubleOrNull(),
       // #237: Extended lipid profile. These three are grams either way, so
       // they pass through like the macros above.
-      monounsaturatedFat100:
-          (offNutriments.monounsaturated_fat_100g as Object?).asDoubleOrNull(),
-      polyunsaturatedFat100:
-          (offNutriments.polyunsaturated_fat_100g as Object?).asDoubleOrNull(),
+      monounsaturatedFat100: (offNutriments.monounsaturated_fat_100g as Object?)
+          .asDoubleOrNull(),
+      polyunsaturatedFat100: (offNutriments.polyunsaturated_fat_100g as Object?)
+          .asDoubleOrNull(),
       transFat100: (offNutriments.trans_fat_100g as Object?).asDoubleOrNull(),
       cholesterol100: _gToMg(
         (offNutriments.cholesterol_100g as Object?).asDoubleOrNull(),
@@ -205,6 +288,68 @@ class MealNutrimentsEntity extends Equatable {
       ),
       niacin100: _gToMg(
         (offNutriments.niacin_100g as Object?).asDoubleOrNull(),
+      ),
+      // Extended vitamins. OFF normalises every `_100g` field to grams, so
+      // each converts to the unit it is displayed in — mg or µg per the
+      // field comments above.
+      vitaminE100: _gToMg(
+        (offNutriments.vitamin_e_100g as Object?).asDoubleOrNull(),
+      ),
+      vitaminK100: _gToUg(
+        (offNutriments.vitamin_k_100g as Object?).asDoubleOrNull(),
+      ),
+      vitaminB1100: _gToMg(
+        (offNutriments.vitamin_b1_100g as Object?).asDoubleOrNull(),
+      ),
+      vitaminB2100: _gToMg(
+        (offNutriments.vitamin_b2_100g as Object?).asDoubleOrNull(),
+      ),
+      vitaminB5100: _gToMg(
+        (offNutriments.pantothenic_acid_100g as Object?).asDoubleOrNull(),
+      ),
+      vitaminB7100: _gToUg(
+        (offNutriments.biotin_100g as Object?).asDoubleOrNull(),
+      ),
+      vitaminB9100: _gToUg(
+        (offNutriments.vitamin_b9_100g as Object?).asDoubleOrNull(),
+      ),
+      choline100: _gToMg(
+        (offNutriments.choline_100g as Object?).asDoubleOrNull(),
+      ),
+      // Trace elements and electrolyte
+      chloride100: _gToMg(
+        (offNutriments.chloride_100g as Object?).asDoubleOrNull(),
+      ),
+      copper100: _gToUg(
+        (offNutriments.copper_100g as Object?).asDoubleOrNull(),
+      ),
+      manganese100: _gToMg(
+        (offNutriments.manganese_100g as Object?).asDoubleOrNull(),
+      ),
+      selenium100: _gToUg(
+        (offNutriments.selenium_100g as Object?).asDoubleOrNull(),
+      ),
+      iodine100: _gToUg(
+        (offNutriments.iodine_100g as Object?).asDoubleOrNull(),
+      ),
+      fluoride100: _gToMg(
+        (offNutriments.fluoride_100g as Object?).asDoubleOrNull(),
+      ),
+      chromium100: _gToUg(
+        (offNutriments.chromium_100g as Object?).asDoubleOrNull(),
+      ),
+      molybdenum100: _gToUg(
+        (offNutriments.molybdenum_100g as Object?).asDoubleOrNull(),
+      ),
+      // Omega-3 fatty acids are grams either way, like the fat macros.
+      ala100: (offNutriments.alpha_linolenic_acid_100g as Object?)
+          .asDoubleOrNull(),
+      epa100: (offNutriments.eicosapentaenoic_acid_100g as Object?)
+          .asDoubleOrNull(),
+      dha100: (offNutriments.docosahexaenoic_acid_100g as Object?)
+          .asDoubleOrNull(),
+      caffeine100: _gToMg(
+        (offNutriments.caffeine_100g as Object?).asDoubleOrNull(),
       ),
     );
   }
@@ -256,6 +401,26 @@ class MealNutrimentsEntity extends Equatable {
       vitaminB6100: food.vitaminB6100,
       vitaminB12100: food.vitaminB12100,
       niacin100: food.niacin100,
+      vitaminE100: food.vitaminE100,
+      vitaminK100: food.vitaminK100,
+      vitaminB1100: food.vitaminB1100,
+      vitaminB2100: food.vitaminB2100,
+      vitaminB5100: food.vitaminB5100,
+      vitaminB7100: food.vitaminB7100,
+      vitaminB9100: food.vitaminB9100,
+      choline100: food.choline100,
+      chloride100: food.chloride100,
+      copper100: food.copper100,
+      manganese100: food.manganese100,
+      selenium100: food.selenium100,
+      iodine100: food.iodine100,
+      fluoride100: food.fluoride100,
+      chromium100: food.chromium100,
+      molybdenum100: food.molybdenum100,
+      ala100: food.ala100,
+      epa100: food.epa100,
+      dha100: food.dha100,
+      caffeine100: food.caffeine100,
     );
   }
 
@@ -269,7 +434,8 @@ class MealNutrimentsEntity extends Equatable {
     // FDC Food nutriments can have different values for Energy [Energy,
     // Energy (Atwater General Factors), Energy (Atwater Specific Factors)].
     // Prefer the most-precise Atwater value; fall back to raw total last.
-    final energyTotal = fdcAmount(FDCConst.fdcKcalAtwaterSpecificId) ??
+    final energyTotal =
+        fdcAmount(FDCConst.fdcKcalAtwaterSpecificId) ??
         fdcAmount(FDCConst.fdcKcalAtwaterGeneralId) ??
         fdcAmount(FDCConst.fdcTotalKcalId);
 
@@ -304,6 +470,221 @@ class MealNutrimentsEntity extends Equatable {
     );
   }
 
+  /// Every micronutrient field name, in the same membership as the
+  /// [micronutrientByKey] / [copyWithMicronutrients] switches. Consumers
+  /// that must not drift when a field is added — the recipe aggregator,
+  /// the drift-guard tests — iterate this list instead of restating it.
+  static const List<String> micronutrientKeys = [
+    'fiber100',
+    'saturatedFat100',
+    'sugars100',
+    'monounsaturatedFat100',
+    'polyunsaturatedFat100',
+    'transFat100',
+    'cholesterol100',
+    'sodium100',
+    'potassium100',
+    'magnesium100',
+    'calcium100',
+    'iron100',
+    'zinc100',
+    'phosphorus100',
+    'vitaminA100',
+    'vitaminC100',
+    'vitaminD100',
+    'vitaminB6100',
+    'vitaminB12100',
+    'niacin100',
+    'vitaminE100',
+    'vitaminK100',
+    'vitaminB1100',
+    'vitaminB2100',
+    'vitaminB5100',
+    'vitaminB7100',
+    'vitaminB9100',
+    'choline100',
+    'chloride100',
+    'copper100',
+    'manganese100',
+    'selenium100',
+    'iodine100',
+    'fluoride100',
+    'chromium100',
+    'molybdenum100',
+    'ala100',
+    'epa100',
+    'dha100',
+    'caffeine100',
+  ];
+
+  /// Reads one micronutrient by its entity field name — the key the
+  /// edit-meal form's controllers, the bloc's `microTexts` map and the AI
+  /// label scan all share. Unknown keys read as null rather than raising:
+  /// the keys come from maps that outlive individual call sites.
+  double? micronutrientByKey(String key) => switch (key) {
+    'fiber100' => fiber100,
+    'saturatedFat100' => saturatedFat100,
+    'sugars100' => sugars100,
+    'monounsaturatedFat100' => monounsaturatedFat100,
+    'polyunsaturatedFat100' => polyunsaturatedFat100,
+    'transFat100' => transFat100,
+    'cholesterol100' => cholesterol100,
+    'sodium100' => sodium100,
+    'potassium100' => potassium100,
+    'magnesium100' => magnesium100,
+    'calcium100' => calcium100,
+    'iron100' => iron100,
+    'zinc100' => zinc100,
+    'phosphorus100' => phosphorus100,
+    'vitaminA100' => vitaminA100,
+    'vitaminC100' => vitaminC100,
+    'vitaminD100' => vitaminD100,
+    'vitaminB6100' => vitaminB6100,
+    'vitaminB12100' => vitaminB12100,
+    'niacin100' => niacin100,
+    'vitaminE100' => vitaminE100,
+    'vitaminK100' => vitaminK100,
+    'vitaminB1100' => vitaminB1100,
+    'vitaminB2100' => vitaminB2100,
+    'vitaminB5100' => vitaminB5100,
+    'vitaminB7100' => vitaminB7100,
+    'vitaminB9100' => vitaminB9100,
+    'choline100' => choline100,
+    'chloride100' => chloride100,
+    'copper100' => copper100,
+    'manganese100' => manganese100,
+    'selenium100' => selenium100,
+    'iodine100' => iodine100,
+    'fluoride100' => fluoride100,
+    'chromium100' => chromium100,
+    'molybdenum100' => molybdenum100,
+    'ala100' => ala100,
+    'epa100' => epa100,
+    'dha100' => dha100,
+    'caffeine100' => caffeine100,
+    _ => null,
+  };
+
+  /// Write side of [micronutrientByKey]: a copy with the named
+  /// micronutrients replaced. Keys absent from [values] — including
+  /// unknown ones — pass through unchanged, so partial maps merge.
+  MealNutrimentsEntity copyWithMicronutrients(Map<String, double?> values) {
+    return MealNutrimentsEntity(
+      energyKcal100: energyKcal100,
+      carbohydrates100: carbohydrates100,
+      fat100: fat100,
+      proteins100: proteins100,
+      sugars100: values.containsKey('sugars100')
+          ? values['sugars100']
+          : sugars100,
+      saturatedFat100: values.containsKey('saturatedFat100')
+          ? values['saturatedFat100']
+          : saturatedFat100,
+      fiber100: values.containsKey('fiber100') ? values['fiber100'] : fiber100,
+      monounsaturatedFat100: values.containsKey('monounsaturatedFat100')
+          ? values['monounsaturatedFat100']
+          : monounsaturatedFat100,
+      polyunsaturatedFat100: values.containsKey('polyunsaturatedFat100')
+          ? values['polyunsaturatedFat100']
+          : polyunsaturatedFat100,
+      transFat100: values.containsKey('transFat100')
+          ? values['transFat100']
+          : transFat100,
+      cholesterol100: values.containsKey('cholesterol100')
+          ? values['cholesterol100']
+          : cholesterol100,
+      sodium100: values.containsKey('sodium100')
+          ? values['sodium100']
+          : sodium100,
+      potassium100: values.containsKey('potassium100')
+          ? values['potassium100']
+          : potassium100,
+      magnesium100: values.containsKey('magnesium100')
+          ? values['magnesium100']
+          : magnesium100,
+      calcium100: values.containsKey('calcium100')
+          ? values['calcium100']
+          : calcium100,
+      iron100: values.containsKey('iron100') ? values['iron100'] : iron100,
+      zinc100: values.containsKey('zinc100') ? values['zinc100'] : zinc100,
+      phosphorus100: values.containsKey('phosphorus100')
+          ? values['phosphorus100']
+          : phosphorus100,
+      vitaminA100: values.containsKey('vitaminA100')
+          ? values['vitaminA100']
+          : vitaminA100,
+      vitaminC100: values.containsKey('vitaminC100')
+          ? values['vitaminC100']
+          : vitaminC100,
+      vitaminD100: values.containsKey('vitaminD100')
+          ? values['vitaminD100']
+          : vitaminD100,
+      vitaminE100: values.containsKey('vitaminE100')
+          ? values['vitaminE100']
+          : vitaminE100,
+      vitaminK100: values.containsKey('vitaminK100')
+          ? values['vitaminK100']
+          : vitaminK100,
+      vitaminB1100: values.containsKey('vitaminB1100')
+          ? values['vitaminB1100']
+          : vitaminB1100,
+      vitaminB2100: values.containsKey('vitaminB2100')
+          ? values['vitaminB2100']
+          : vitaminB2100,
+      vitaminB5100: values.containsKey('vitaminB5100')
+          ? values['vitaminB5100']
+          : vitaminB5100,
+      vitaminB6100: values.containsKey('vitaminB6100')
+          ? values['vitaminB6100']
+          : vitaminB6100,
+      vitaminB7100: values.containsKey('vitaminB7100')
+          ? values['vitaminB7100']
+          : vitaminB7100,
+      vitaminB9100: values.containsKey('vitaminB9100')
+          ? values['vitaminB9100']
+          : vitaminB9100,
+      vitaminB12100: values.containsKey('vitaminB12100')
+          ? values['vitaminB12100']
+          : vitaminB12100,
+      choline100: values.containsKey('choline100')
+          ? values['choline100']
+          : choline100,
+      niacin100: values.containsKey('niacin100')
+          ? values['niacin100']
+          : niacin100,
+      chloride100: values.containsKey('chloride100')
+          ? values['chloride100']
+          : chloride100,
+      copper100: values.containsKey('copper100')
+          ? values['copper100']
+          : copper100,
+      manganese100: values.containsKey('manganese100')
+          ? values['manganese100']
+          : manganese100,
+      selenium100: values.containsKey('selenium100')
+          ? values['selenium100']
+          : selenium100,
+      iodine100: values.containsKey('iodine100')
+          ? values['iodine100']
+          : iodine100,
+      fluoride100: values.containsKey('fluoride100')
+          ? values['fluoride100']
+          : fluoride100,
+      chromium100: values.containsKey('chromium100')
+          ? values['chromium100']
+          : chromium100,
+      molybdenum100: values.containsKey('molybdenum100')
+          ? values['molybdenum100']
+          : molybdenum100,
+      ala100: values.containsKey('ala100') ? values['ala100'] : ala100,
+      epa100: values.containsKey('epa100') ? values['epa100'] : epa100,
+      dha100: values.containsKey('dha100') ? values['dha100'] : dha100,
+      caffeine100: values.containsKey('caffeine100')
+          ? values['caffeine100']
+          : caffeine100,
+    );
+  }
+
   static double? _getValuePerUnit(double? valuePer100) {
     if (valuePer100 != null) {
       return valuePer100 / 100;
@@ -314,11 +695,11 @@ class MealNutrimentsEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        energyKcal100,
-        carbohydrates100,
-        fat100,
-        proteins100,
-      ];
+    energyKcal100,
+    carbohydrates100,
+    fat100,
+    proteins100,
+  ];
 }
 
 /// Outcome of running the three physical-plausibility checks against a
@@ -335,11 +716,11 @@ class NutrimentsValidationResult {
   final String? failureReason;
 
   const NutrimentsValidationResult.ok()
-      : isConsistent = true,
-        failureReason = null;
+    : isConsistent = true,
+      failureReason = null;
 
   const NutrimentsValidationResult.failed(this.failureReason)
-      : isConsistent = false;
+    : isConsistent = false;
 }
 
 /// Tolerance applied to weight-summation and subset-of comparisons. Source
@@ -370,14 +751,20 @@ bool isNutrimentsConsistent(MealNutrimentsEntity nutriments) =>
 NutrimentsValidationResult validateNutriments(MealNutrimentsEntity nutriments) {
   final sugars = nutriments.sugars100;
   final carbs = nutriments.carbohydrates100;
-  if (sugars != null && carbs != null && sugars > carbs + _nutrimentsValidationToleranceG) {
+  if (sugars != null &&
+      carbs != null &&
+      sugars > carbs + _nutrimentsValidationToleranceG) {
     return const NutrimentsValidationResult.failed('sugars_exceed_carbs');
   }
 
   final satFat = nutriments.saturatedFat100;
   final fat = nutriments.fat100;
-  if (satFat != null && fat != null && satFat > fat + _nutrimentsValidationToleranceG) {
-    return const NutrimentsValidationResult.failed('saturated_fat_exceeds_total_fat');
+  if (satFat != null &&
+      fat != null &&
+      satFat > fat + _nutrimentsValidationToleranceG) {
+    return const NutrimentsValidationResult.failed(
+      'saturated_fat_exceeds_total_fat',
+    );
   }
 
   // Per-100g basis: the weight-bearing macros (carbs + fat + protein) cannot

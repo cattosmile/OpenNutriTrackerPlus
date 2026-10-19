@@ -102,6 +102,50 @@ class SpFoodDTO {
   @JsonKey(name: 'niacin_100')
   final double? niacin100;
 
+  // Extended vitamin set (app units: mg except where noted)
+  @JsonKey(name: 'vitamin_e_100')
+  final double? vitaminE100; // mg
+  @JsonKey(name: 'vitamin_k_100')
+  final double? vitaminK100; // µg
+  @JsonKey(name: 'vitamin_b1_100')
+  final double? vitaminB1100; // mg
+  @JsonKey(name: 'vitamin_b2_100')
+  final double? vitaminB2100; // mg
+  @JsonKey(name: 'vitamin_b5_100')
+  final double? vitaminB5100; // mg
+  @JsonKey(name: 'vitamin_b7_100')
+  final double? vitaminB7100; // µg
+  @JsonKey(name: 'vitamin_b9_100')
+  final double? vitaminB9100; // µg
+  @JsonKey(name: 'choline_100')
+  final double? choline100; // mg
+  // Trace elements and electrolyte
+  @JsonKey(name: 'chloride_100')
+  final double? chloride100; // mg
+  @JsonKey(name: 'copper_100')
+  final double? copper100; // µg
+  @JsonKey(name: 'manganese_100')
+  final double? manganese100; // mg
+  @JsonKey(name: 'selenium_100')
+  final double? selenium100; // µg
+  @JsonKey(name: 'iodine_100')
+  final double? iodine100; // µg
+  @JsonKey(name: 'fluoride_100')
+  final double? fluoride100; // mg
+  @JsonKey(name: 'chromium_100')
+  final double? chromium100; // µg
+  @JsonKey(name: 'molybdenum_100')
+  final double? molybdenum100; // µg
+  // Omega-3 fatty acids
+  @JsonKey(name: 'ala_100')
+  final double? ala100; // g
+  @JsonKey(name: 'epa_100')
+  final double? epa100; // g
+  @JsonKey(name: 'dha_100')
+  final double? dha100; // g
+  @JsonKey(name: 'caffeine_100')
+  final double? caffeine100; // mg
+
   /// Whether the backend holds a deliverable portion for this food, as
   /// the search RPC reports it — or null when the backend did not say.
   ///
@@ -214,6 +258,26 @@ class SpFoodDTO {
     this.vitaminB6100,
     this.vitaminB12100,
     this.niacin100,
+    this.vitaminE100,
+    this.vitaminK100,
+    this.vitaminB1100,
+    this.vitaminB2100,
+    this.vitaminB5100,
+    this.vitaminB7100,
+    this.vitaminB9100,
+    this.choline100,
+    this.chloride100,
+    this.copper100,
+    this.manganese100,
+    this.selenium100,
+    this.iodine100,
+    this.fluoride100,
+    this.chromium100,
+    this.molybdenum100,
+    this.ala100,
+    this.epa100,
+    this.dha100,
+    this.caffeine100,
     this.hasPortion,
     this.localizedName,
   });

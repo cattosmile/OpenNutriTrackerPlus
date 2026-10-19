@@ -136,5 +136,95 @@ void main() {
       // female 310 mg + male 400 mg averaged = 355 mg.
       expect(ref!.amount, 355);
     });
+
+    // Extended set: one value per nutrient that the NIH / IOM tables
+    // publish sex-specific references for, plus the two that do not vary.
+    test('male 20 — extended nutrients match the IOM tables', () {
+      final u = user(age: 20, gender: UserGenderEntity.male);
+      double amount(String key) =>
+          getReferenceFor(nutrient: key, user: u)!.amount;
+      expect(amount(NutrientPanelKeys.zinc), 11);
+      expect(amount(NutrientPanelKeys.vitaminA), 900);
+      expect(amount(NutrientPanelKeys.vitaminC), 90);
+      expect(amount(NutrientPanelKeys.vitaminK), 120);
+      expect(amount(NutrientPanelKeys.niacin), 16);
+      expect(amount(NutrientPanelKeys.vitaminB6), 1.3);
+      expect(amount(NutrientPanelKeys.vitaminB7), 30);
+      expect(amount(NutrientPanelKeys.vitaminB9), 400);
+      expect(amount(NutrientPanelKeys.choline), 550);
+      expect(amount(NutrientPanelKeys.copper), 900);
+      expect(amount(NutrientPanelKeys.manganese), 2.3);
+      expect(amount(NutrientPanelKeys.selenium), 55);
+      expect(amount(NutrientPanelKeys.iodine), 150);
+      expect(amount(NutrientPanelKeys.fluoride), 4);
+      expect(amount(NutrientPanelKeys.chromium), 35);
+      expect(amount(NutrientPanelKeys.molybdenum), 45);
+      expect(amount(NutrientPanelKeys.ala), 1.6);
+      expect(amount(NutrientPanelKeys.phosphorus), 700);
+      expect(amount(NutrientPanelKeys.chloride), 2300);
+      expect(amount(NutrientPanelKeys.vitaminE), 15);
+      expect(amount(NutrientPanelKeys.vitaminB1), 1.2);
+      expect(amount(NutrientPanelKeys.vitaminB2), 1.3);
+      expect(amount(NutrientPanelKeys.vitaminB5), 5);
+    });
+
+    test('female 30 — extended nutrients switch to the female rows', () {
+      final u = user(age: 30, gender: UserGenderEntity.female);
+      double amount(String key) =>
+          getReferenceFor(nutrient: key, user: u)!.amount;
+      expect(amount(NutrientPanelKeys.zinc), 8);
+      expect(amount(NutrientPanelKeys.vitaminA), 700);
+      expect(amount(NutrientPanelKeys.vitaminC), 75);
+      expect(amount(NutrientPanelKeys.vitaminK), 90);
+      expect(amount(NutrientPanelKeys.niacin), 14);
+      expect(amount(NutrientPanelKeys.choline), 425);
+      expect(amount(NutrientPanelKeys.manganese), 1.8);
+      expect(amount(NutrientPanelKeys.fluoride), 3);
+      expect(amount(NutrientPanelKeys.chromium), 25);
+      expect(amount(NutrientPanelKeys.ala), 1.1);
+      // Sex-invariant across the table.
+      expect(amount(NutrientPanelKeys.selenium), 55);
+      expect(amount(NutrientPanelKeys.molybdenum), 45);
+      expect(amount(NutrientPanelKeys.vitaminB9), 400);
+      expect(amount(NutrientPanelKeys.vitaminB12), 2.4);
+    });
+
+    test('B6 and chromium step down in the 51+ bands', () {
+      final older = user(age: 60, gender: UserGenderEntity.male);
+      expect(
+        getReferenceFor(nutrient: NutrientPanelKeys.vitaminB6, user: older)!
+            .amount,
+        1.7,
+      );
+      expect(
+        getReferenceFor(nutrient: NutrientPanelKeys.chromium, user: older)!
+            .amount,
+        30,
+      );
+      final olderF = user(age: 60, gender: UserGenderEntity.female);
+      expect(
+        getReferenceFor(nutrient: NutrientPanelKeys.vitaminB6, user: olderF)!
+            .amount,
+        1.5,
+      );
+    });
+
+    test('reference values do not move with weight or height', () {
+      final light = user(age: 25, gender: UserGenderEntity.male);
+      final heavy = UserEntity(
+        birthday: light.birthday,
+        heightCM: 195,
+        weightKG: 120,
+        gender: UserGenderEntity.male,
+        goal: UserWeightGoalEntity.maintainWeight,
+        pal: UserPALEntity.sedentary,
+      );
+      expect(
+        getReferenceFor(nutrient: NutrientPanelKeys.choline, user: light)!
+            .amount,
+        getReferenceFor(nutrient: NutrientPanelKeys.choline, user: heavy)!
+            .amount,
+      );
+    });
   });
 }

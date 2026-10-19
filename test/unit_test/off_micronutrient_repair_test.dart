@@ -215,6 +215,86 @@ void main() {
       },
     );
 
+    test('extended fields ride along on a repair, unscaled', () {
+      // Fields added after #775 were never stored in grams, so a repair
+      // copies them as they are. If repairMeal forgets one, it silently
+      // becomes null here.
+      final grams = _offGramsAsStoredBefore775();
+      final repaired = OffMicronutrientRepair.repairMeal(
+        _meal(
+          source: MealSourceDBO.off,
+          nutriments: MealNutrimentsDBO(
+            energyKcal100: grams.energyKcal100,
+            carbohydrates100: grams.carbohydrates100,
+            fat100: grams.fat100,
+            proteins100: grams.proteins100,
+            sugars100: grams.sugars100,
+            saturatedFat100: grams.saturatedFat100,
+            fiber100: grams.fiber100,
+            monounsaturatedFat100: grams.monounsaturatedFat100,
+            polyunsaturatedFat100: grams.polyunsaturatedFat100,
+            transFat100: grams.transFat100,
+            cholesterol100: grams.cholesterol100,
+            sodium100: grams.sodium100,
+            potassium100: grams.potassium100,
+            magnesium100: grams.magnesium100,
+            calcium100: grams.calcium100,
+            iron100: grams.iron100,
+            zinc100: grams.zinc100,
+            phosphorus100: grams.phosphorus100,
+            vitaminA100: grams.vitaminA100,
+            vitaminC100: grams.vitaminC100,
+            vitaminD100: grams.vitaminD100,
+            vitaminB6100: grams.vitaminB6100,
+            vitaminB12100: grams.vitaminB12100,
+            niacin100: grams.niacin100,
+            vitaminE100: 3,
+            vitaminK100: 48,
+            vitaminB1100: 0.4,
+            vitaminB2100: 0.6,
+            vitaminB5100: 1.2,
+            vitaminB7100: 20,
+            vitaminB9100: 80,
+            choline100: 40,
+            chloride100: 850,
+            copper100: 350,
+            manganese100: 1.5,
+            selenium100: 30,
+            iodine100: 45,
+            fluoride100: 0.7,
+            chromium100: 10,
+            molybdenum100: 20,
+            ala100: 0.15,
+            epa100: 0.08,
+            dha100: 0.12,
+            caffeine100: 22,
+          ),
+        ),
+      );
+
+      _expectAppUnits(repaired.nutriments);
+      expect(repaired.nutriments.vitaminE100, 3);
+      expect(repaired.nutriments.vitaminK100, 48);
+      expect(repaired.nutriments.vitaminB1100, 0.4);
+      expect(repaired.nutriments.vitaminB2100, 0.6);
+      expect(repaired.nutriments.vitaminB5100, 1.2);
+      expect(repaired.nutriments.vitaminB7100, 20);
+      expect(repaired.nutriments.vitaminB9100, 80);
+      expect(repaired.nutriments.choline100, 40);
+      expect(repaired.nutriments.chloride100, 850);
+      expect(repaired.nutriments.copper100, 350);
+      expect(repaired.nutriments.manganese100, 1.5);
+      expect(repaired.nutriments.selenium100, 30);
+      expect(repaired.nutriments.iodine100, 45);
+      expect(repaired.nutriments.fluoride100, 0.7);
+      expect(repaired.nutriments.chromium100, 10);
+      expect(repaired.nutriments.molybdenum100, 20);
+      expect(repaired.nutriments.ala100, 0.15);
+      expect(repaired.nutriments.epa100, 0.08);
+      expect(repaired.nutriments.dha100, 0.12);
+      expect(repaired.nutriments.caffeine100, 22);
+    });
+
     test('leaves a row a build carrying #775 wrote exactly as it is', () {
       final meal = _mealWrittenAfter775();
       expect(meal.dataVersion, MealDBO.currentDataVersion);

@@ -41,13 +41,33 @@ class MealNutrimentsDBOAdapter extends TypeAdapter<MealNutrimentsDBO> {
       vitaminB6100: (fields[21] as num?)?.toDouble(),
       vitaminB12100: (fields[22] as num?)?.toDouble(),
       niacin100: (fields[23] as num?)?.toDouble(),
+      vitaminE100: (fields[24] as num?)?.toDouble(),
+      vitaminK100: (fields[25] as num?)?.toDouble(),
+      vitaminB1100: (fields[26] as num?)?.toDouble(),
+      vitaminB2100: (fields[27] as num?)?.toDouble(),
+      vitaminB5100: (fields[28] as num?)?.toDouble(),
+      vitaminB7100: (fields[29] as num?)?.toDouble(),
+      vitaminB9100: (fields[30] as num?)?.toDouble(),
+      choline100: (fields[31] as num?)?.toDouble(),
+      chloride100: (fields[32] as num?)?.toDouble(),
+      copper100: (fields[33] as num?)?.toDouble(),
+      manganese100: (fields[34] as num?)?.toDouble(),
+      selenium100: (fields[35] as num?)?.toDouble(),
+      iodine100: (fields[36] as num?)?.toDouble(),
+      fluoride100: (fields[37] as num?)?.toDouble(),
+      chromium100: (fields[38] as num?)?.toDouble(),
+      molybdenum100: (fields[39] as num?)?.toDouble(),
+      ala100: (fields[40] as num?)?.toDouble(),
+      epa100: (fields[41] as num?)?.toDouble(),
+      dha100: (fields[42] as num?)?.toDouble(),
+      caffeine100: (fields[43] as num?)?.toDouble(),
     );
   }
 
   @override
   void write(BinaryWriter writer, MealNutrimentsDBO obj) {
     writer
-      ..writeByte(24)
+      ..writeByte(44)
       ..writeByte(0)
       ..write(obj.energyKcal100)
       ..writeByte(1)
@@ -95,7 +115,47 @@ class MealNutrimentsDBOAdapter extends TypeAdapter<MealNutrimentsDBO> {
       ..writeByte(22)
       ..write(obj.vitaminB12100)
       ..writeByte(23)
-      ..write(obj.niacin100);
+      ..write(obj.niacin100)
+      ..writeByte(24)
+      ..write(obj.vitaminE100)
+      ..writeByte(25)
+      ..write(obj.vitaminK100)
+      ..writeByte(26)
+      ..write(obj.vitaminB1100)
+      ..writeByte(27)
+      ..write(obj.vitaminB2100)
+      ..writeByte(28)
+      ..write(obj.vitaminB5100)
+      ..writeByte(29)
+      ..write(obj.vitaminB7100)
+      ..writeByte(30)
+      ..write(obj.vitaminB9100)
+      ..writeByte(31)
+      ..write(obj.choline100)
+      ..writeByte(32)
+      ..write(obj.chloride100)
+      ..writeByte(33)
+      ..write(obj.copper100)
+      ..writeByte(34)
+      ..write(obj.manganese100)
+      ..writeByte(35)
+      ..write(obj.selenium100)
+      ..writeByte(36)
+      ..write(obj.iodine100)
+      ..writeByte(37)
+      ..write(obj.fluoride100)
+      ..writeByte(38)
+      ..write(obj.chromium100)
+      ..writeByte(39)
+      ..write(obj.molybdenum100)
+      ..writeByte(40)
+      ..write(obj.ala100)
+      ..writeByte(41)
+      ..write(obj.epa100)
+      ..writeByte(42)
+      ..write(obj.dha100)
+      ..writeByte(43)
+      ..write(obj.caffeine100);
   }
 
   @override
@@ -140,6 +200,26 @@ MealNutrimentsDBO _$MealNutrimentsDBOFromJson(
   vitaminB6100: (json['vitaminB6100'] as num?)?.toDouble(),
   vitaminB12100: (json['vitaminB12100'] as num?)?.toDouble(),
   niacin100: (json['niacin100'] as num?)?.toDouble(),
+  vitaminE100: (json['vitaminE100'] as num?)?.toDouble(),
+  vitaminK100: (json['vitaminK100'] as num?)?.toDouble(),
+  vitaminB1100: (json['vitaminB1100'] as num?)?.toDouble(),
+  vitaminB2100: (json['vitaminB2100'] as num?)?.toDouble(),
+  vitaminB5100: (json['vitaminB5100'] as num?)?.toDouble(),
+  vitaminB7100: (json['vitaminB7100'] as num?)?.toDouble(),
+  vitaminB9100: (json['vitaminB9100'] as num?)?.toDouble(),
+  choline100: (json['choline100'] as num?)?.toDouble(),
+  chloride100: (json['chloride100'] as num?)?.toDouble(),
+  copper100: (json['copper100'] as num?)?.toDouble(),
+  manganese100: (json['manganese100'] as num?)?.toDouble(),
+  selenium100: (json['selenium100'] as num?)?.toDouble(),
+  iodine100: (json['iodine100'] as num?)?.toDouble(),
+  fluoride100: (json['fluoride100'] as num?)?.toDouble(),
+  chromium100: (json['chromium100'] as num?)?.toDouble(),
+  molybdenum100: (json['molybdenum100'] as num?)?.toDouble(),
+  ala100: (json['ala100'] as num?)?.toDouble(),
+  epa100: (json['epa100'] as num?)?.toDouble(),
+  dha100: (json['dha100'] as num?)?.toDouble(),
+  caffeine100: (json['caffeine100'] as num?)?.toDouble(),
 );
 
 Map<String, dynamic> _$MealNutrimentsDBOToJson(MealNutrimentsDBO instance) =>
@@ -168,4 +248,24 @@ Map<String, dynamic> _$MealNutrimentsDBOToJson(MealNutrimentsDBO instance) =>
       'vitaminB6100': instance.vitaminB6100,
       'vitaminB12100': instance.vitaminB12100,
       'niacin100': instance.niacin100,
+      'vitaminE100': instance.vitaminE100,
+      'vitaminK100': instance.vitaminK100,
+      'vitaminB1100': instance.vitaminB1100,
+      'vitaminB2100': instance.vitaminB2100,
+      'vitaminB5100': instance.vitaminB5100,
+      'vitaminB7100': instance.vitaminB7100,
+      'vitaminB9100': instance.vitaminB9100,
+      'choline100': instance.choline100,
+      'chloride100': instance.chloride100,
+      'copper100': instance.copper100,
+      'manganese100': instance.manganese100,
+      'selenium100': instance.selenium100,
+      'iodine100': instance.iodine100,
+      'fluoride100': instance.fluoride100,
+      'chromium100': instance.chromium100,
+      'molybdenum100': instance.molybdenum100,
+      'ala100': instance.ala100,
+      'epa100': instance.epa100,
+      'dha100': instance.dha100,
+      'caffeine100': instance.caffeine100,
     };

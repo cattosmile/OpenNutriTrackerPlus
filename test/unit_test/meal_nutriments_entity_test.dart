@@ -169,44 +169,45 @@ void main() {
       dynamic vitaminB6,
       dynamic vitaminB12,
       dynamic niacin,
-    }) =>
-        OFFProductNutrimentsDTO(
-          energy_kcal_100g: energyKcal,
-          carbohydrates_100g: carbs,
-          fat_100g: fat,
-          proteins_100g: proteins,
-          sugars_100g: sugars,
-          saturated_fat_100g: saturatedFat,
-          fiber_100g: fiber,
-          monounsaturated_fat_100g: monounsaturatedFat,
-          polyunsaturated_fat_100g: polyunsaturatedFat,
-          trans_fat_100g: transFat,
-          cholesterol_100g: cholesterol,
-          sodium_100g: sodium,
-          potassium_100g: potassium,
-          magnesium_100g: magnesium,
-          calcium_100g: calcium,
-          iron_100g: iron,
-          zinc_100g: zinc,
-          phosphorus_100g: phosphorus,
-          vitamin_a_100g: vitaminA,
-          vitamin_c_100g: vitaminC,
-          vitamin_d_100g: vitaminD,
-          vitamin_b6_100g: vitaminB6,
-          vitamin_b12_100g: vitaminB12,
-          niacin_100g: niacin,
-        );
+    }) => OFFProductNutrimentsDTO(
+      energy_kcal_100g: energyKcal,
+      carbohydrates_100g: carbs,
+      fat_100g: fat,
+      proteins_100g: proteins,
+      sugars_100g: sugars,
+      saturated_fat_100g: saturatedFat,
+      fiber_100g: fiber,
+      monounsaturated_fat_100g: monounsaturatedFat,
+      polyunsaturated_fat_100g: polyunsaturatedFat,
+      trans_fat_100g: transFat,
+      cholesterol_100g: cholesterol,
+      sodium_100g: sodium,
+      potassium_100g: potassium,
+      magnesium_100g: magnesium,
+      calcium_100g: calcium,
+      iron_100g: iron,
+      zinc_100g: zinc,
+      phosphorus_100g: phosphorus,
+      vitamin_a_100g: vitaminA,
+      vitamin_c_100g: vitaminC,
+      vitamin_d_100g: vitaminD,
+      vitamin_b6_100g: vitaminB6,
+      vitamin_b12_100g: vitaminB12,
+      niacin_100g: niacin,
+    );
 
     test('maps core macros correctly', () {
-      final entity = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        energyKcal: 200.0,
-        carbs: 25.0,
-        fat: 8.0,
-        proteins: 12.0,
-        sugars: 4.0,
-        saturatedFat: 2.5,
-        fiber: 3.0,
-      ));
+      final entity = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(
+          energyKcal: 200.0,
+          carbs: 25.0,
+          fat: 8.0,
+          proteins: 12.0,
+          sugars: 4.0,
+          saturatedFat: 2.5,
+          fiber: 3.0,
+        ),
+      );
 
       expect(entity.energyKcal100, 200.0);
       expect(entity.carbohydrates100, 25.0);
@@ -218,30 +219,34 @@ void main() {
     });
 
     test('handles integer values from OFF (dynamic type)', () {
-      final entity = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        energyKcal: 200,
-        carbs: 25,
-        fat: 8,
-        proteins: 12,
-        sugars: 4,
-        saturatedFat: 2,
-        fiber: 3,
-      ));
+      final entity = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(
+          energyKcal: 200,
+          carbs: 25,
+          fat: 8,
+          proteins: 12,
+          sugars: 4,
+          saturatedFat: 2,
+          fiber: 3,
+        ),
+      );
 
       expect(entity.energyKcal100, 200.0);
       expect(entity.carbohydrates100, 25.0);
     });
 
     test('handles string values from OFF (dynamic type)', () {
-      final entity = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        energyKcal: '200',
-        carbs: '25',
-        fat: '8',
-        proteins: '12',
-        sugars: null,
-        saturatedFat: null,
-        fiber: null,
-      ));
+      final entity = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(
+          energyKcal: '200',
+          carbs: '25',
+          fat: '8',
+          proteins: '12',
+          sugars: null,
+          saturatedFat: null,
+          fiber: null,
+        ),
+      );
 
       expect(entity.energyKcal100, 200.0);
       expect(entity.carbohydrates100, 25.0);
@@ -252,32 +257,34 @@ void main() {
     // The expectations are the app's own units, so this is the conversion
     // #716 was missing, read in both directions at once.
     test('converts micronutrients out of the grams OFF sends them in', () {
-      final entity = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        energyKcal: 0,
-        carbs: 0,
-        fat: 0,
-        proteins: 0,
-        sugars: 0,
-        saturatedFat: 0,
-        fiber: 0,
-        monounsaturatedFat: 1.1,
-        polyunsaturatedFat: 2.2,
-        transFat: 0.5,
-        cholesterol: 0.055,
-        sodium: 0.12,
-        potassium: 0.3,
-        magnesium: 0.025,
-        calcium: 0.1,
-        iron: 0.002,
-        zinc: 0.001,
-        phosphorus: 0.15,
-        vitaminA: 0.00009,
-        vitaminC: 0.045,
-        vitaminD: 0.000005,
-        vitaminB6: 0.0003,
-        vitaminB12: 0.0000015,
-        niacin: 0.008,
-      ));
+      final entity = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(
+          energyKcal: 0,
+          carbs: 0,
+          fat: 0,
+          proteins: 0,
+          sugars: 0,
+          saturatedFat: 0,
+          fiber: 0,
+          monounsaturatedFat: 1.1,
+          polyunsaturatedFat: 2.2,
+          transFat: 0.5,
+          cholesterol: 0.055,
+          sodium: 0.12,
+          potassium: 0.3,
+          magnesium: 0.025,
+          calcium: 0.1,
+          iron: 0.002,
+          zinc: 0.001,
+          phosphorus: 0.15,
+          vitaminA: 0.00009,
+          vitaminC: 0.045,
+          vitaminD: 0.000005,
+          vitaminB6: 0.0003,
+          vitaminB12: 0.0000015,
+          niacin: 0.008,
+        ),
+      );
 
       // Lipids are grams on both sides, so they pass straight through.
       expect(entity.monounsaturatedFat100, 1.1);
@@ -306,10 +313,9 @@ void main() {
     // barcode 3168930010265 and sodium for 3017620422003, both reported with
     // `_unit: "g"`.
     test('matches what the live OFF API returns for real barcodes', () {
-      final entity = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        iron: 0.0021,
-        sodium: 0.0428,
-      ));
+      final entity = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(iron: 0.0021, sodium: 0.0428),
+      );
 
       expect(entity.iron100, closeTo(2.1, 1e-9));
       expect(entity.sodium100, closeTo(42.8, 1e-9));
@@ -320,22 +326,24 @@ void main() {
     // was a thousand times smaller than the FDC one on every mineral, and a
     // million times smaller on vitamins A, D and B12.
     test('agrees with the FDC mapping for the same food', () {
-      final fromOff = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        cholesterol: 0.055,
-        sodium: 0.12,
-        potassium: 0.3,
-        magnesium: 0.025,
-        calcium: 0.1,
-        iron: 0.002,
-        zinc: 0.001,
-        phosphorus: 0.15,
-        vitaminA: 0.00009,
-        vitaminC: 0.045,
-        vitaminD: 0.000005,
-        vitaminB6: 0.0003,
-        vitaminB12: 0.0000015,
-        niacin: 0.008,
-      ));
+      final fromOff = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(
+          cholesterol: 0.055,
+          sodium: 0.12,
+          potassium: 0.3,
+          magnesium: 0.025,
+          calcium: 0.1,
+          iron: 0.002,
+          zinc: 0.001,
+          phosphorus: 0.15,
+          vitaminA: 0.00009,
+          vitaminC: 0.045,
+          vitaminD: 0.000005,
+          vitaminB6: 0.0003,
+          vitaminB12: 0.0000015,
+          niacin: 0.008,
+        ),
+      );
       final fromFdc = MealNutrimentsEntity.fromFDCNutriments([
         _fdc(FDCConst.fdcCholesterolId, 55),
         _fdc(FDCConst.fdcSodiumId, 120),
@@ -372,25 +380,26 @@ void main() {
     // A declared zero is a fact about the food and has to survive the
     // conversion as a zero, not become a null the panel then ignores.
     test('keeps a declared zero as zero rather than null', () {
-      final entity = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        sodium: 0,
-        vitaminD: 0.0,
-      ));
+      final entity = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(sodium: 0, vitaminD: 0.0),
+      );
 
       expect(entity.sodium100, 0.0);
       expect(entity.vitaminD100, 0.0);
     });
 
     test('absent micronutrients are null', () {
-      final entity = MealNutrimentsEntity.fromOffNutriments(buildDto(
-        energyKcal: 100,
-        carbs: 10,
-        fat: 5,
-        proteins: 5,
-        sugars: 2,
-        saturatedFat: 1,
-        fiber: 1,
-      ));
+      final entity = MealNutrimentsEntity.fromOffNutriments(
+        buildDto(
+          energyKcal: 100,
+          carbs: 10,
+          fat: 5,
+          proteins: 5,
+          sugars: 2,
+          saturatedFat: 1,
+          fiber: 1,
+        ),
+      );
 
       expect(entity.monounsaturatedFat100, isNull);
       expect(entity.sodium100, isNull);
@@ -487,6 +496,70 @@ void main() {
       expect(entity.sugars100, isNull);
       expect(entity.saturatedFat100, 3);
       expect(entity.fiber100, 2);
+    });
+  });
+
+  group('micronutrient key contract', () {
+    // micronutrientByKey, copyWithMicronutrients and micronutrientKeys are
+    // three hand-kept switches that must agree. Per-key distinct sentinels
+    // catch a key any of the three forgets (reads null) and two keys
+    // collapsed onto one field (reads the wrong sentinel).
+    test('every key writes via copyWithMicronutrients and reads back', () {
+      final keys = MealNutrimentsEntity.micronutrientKeys;
+      expect(keys.toSet().length, keys.length, reason: 'duplicate key');
+      final sentinels = <String, double>{
+        for (var i = 0; i < keys.length; i++) keys[i]: (i + 1).toDouble(),
+      };
+      final entity = MealNutrimentsEntity.empty().copyWithMicronutrients(
+        sentinels,
+      );
+
+      for (final entry in sentinels.entries) {
+        expect(
+          entity.micronutrientByKey(entry.key),
+          entry.value,
+          reason:
+              '${entry.key} is in micronutrientKeys but lost on the '
+              'read or write side',
+        );
+      }
+    });
+
+    test('copyWithMicronutrients touches only the keys it is given', () {
+      const base = MealNutrimentsEntity(
+        energyKcal100: 250,
+        carbohydrates100: 30,
+        fat100: 10,
+        proteins100: 15,
+        sugars100: null,
+        saturatedFat100: null,
+        fiber100: 3,
+      );
+      final copy = base.copyWithMicronutrients({'selenium100': 75});
+
+      expect(copy.energyKcal100, 250);
+      expect(copy.carbohydrates100, 30);
+      expect(copy.fat100, 10);
+      expect(copy.proteins100, 15);
+      expect(copy.fiber100, 3);
+      expect(copy.selenium100, 75);
+      expect(base.selenium100, isNull);
+    });
+
+    test('unknown keys are ignored, not stored', () {
+      const base = MealNutrimentsEntity(
+        energyKcal100: null,
+        carbohydrates100: null,
+        fat100: null,
+        proteins100: null,
+        sugars100: null,
+        saturatedFat100: null,
+        fiber100: 3,
+      );
+      final copy = base.copyWithMicronutrients({'not-a-field': 1});
+
+      expect(copy.fiber100, 3);
+      expect(copy.micronutrientByKey('not-a-field'), isNull);
     });
   });
 }
