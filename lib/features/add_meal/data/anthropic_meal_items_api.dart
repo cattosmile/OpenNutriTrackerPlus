@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
 import 'package:opennutritracker/features/add_meal/domain/meal_items_api.dart';
+import 'package:opennutritracker/features/add_meal/domain/structured_tool_api.dart';
 import 'package:opennutritracker/features/add_meal/util/meal_text_parser.dart';
 
 /// Asks Claude directly, over the Messages API, for a list of food items.
@@ -10,7 +11,7 @@ import 'package:opennutritracker/features/add_meal/util/meal_text_parser.dart';
 /// One of two [MealItemsApi] implementations. This one holds nothing but
 /// Anthropic's wire format: the prompts, the counts-only rule and
 /// [mealItemsToolSchema] live above the seam, shared with every provider.
-class AnthropicMealItemsApi implements MealItemsApi {
+class AnthropicMealItemsApi implements MealItemsApi, StructuredToolApi {
   static final _log = Logger('AnthropicMealItemsApi');
 
   static const _endpoint = 'https://api.anthropic.com/v1/messages';
@@ -108,6 +109,120 @@ class AnthropicMealItemsApi implements MealItemsApi {
       // Only the typed path corroborates: a photograph states no units at
       // all, and its own counts-only filter already drops them.
       statedIn: content is MealTextContent ? content.text : null,
+    );
+  }
+
+  /// One forced tool call whose schema the caller defines — see
+  /// [StructuredToolApi]. Photos travel before the prompt text, matching
+  /// [requestItems]'s single-photo order, which is what this API's own
+  /// vision guidance recommends.
+  @override
+  Future<Map<String, dynamic>> requestToolJson({
+    required String system,
+    required String userPrompt,
+    required List<MealPhoto> photos,
+    required String toolName,
+    required String toolDescription,
+    required Map<String, dynamic> toolSchema,
+  }) async {
+    final body = jsonEncode({
+      'model': model,
+      // A label transcription is dozens of numbers where the items call is a
+      // few short strings.
+      'max_tokens': _structuredMaxTokens,
+      'system': system,
+      'tools': [
+        {
+          'name': toolName,
+          'description': toolDescription,
+          'input_schema': toolSchema,
+        },
+      ],
+      'tool_choice': {'type': 'tool', 'name': toolName},
+      'messages': [
+        {
+          'role': 'user',
+          'content': [
+            for (final photo in photos)
+              {
+                'type': 'image',
+                'source': {
+                  'type': 'base64',
+                  'media_type': photo.mediaType,
+                  'data': base64Encode(photo.bytes),
+                },
+              },
+            {'type': 'text', 'text': userPrompt},
+          ],
+        },
+      ],
+    });
+
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse(_endpoint),
+            headers: {
+              'content-type': 'application/json',
+              'x-api-key': _apiKey(),
+              'anthropic-version': _apiVersion,
+            },
+            body: body,
+          )
+          .timeout(timeout);
+    } catch (e) {
+      // Deliberately not logging `e`: a socket error can carry the request
+      // URL and, on some platforms, part of the payload — which for the
+      // photo path is the photograph.
+      throw const MealInterpreterException('request failed');
+    }
+
+    if (response.statusCode != 200) {
+      _log.warning('Interpreter call failed with ${response.statusCode}');
+      throw MealInterpreterException(
+        'provider returned ${response.statusCode}',
+        failure: _failureFor(response.statusCode),
+        statusCode: response.statusCode,
+      );
+    }
+
+    return _toolInputFrom(response.body, toolName);
+  }
+
+  static const _structuredMaxTokens = 4096;
+
+  /// The tool input of a [toolName] call, as an object. Same shape walk as
+  /// [_itemsFrom]; requires a map because the structured callers read named
+  /// fields out of the result.
+  Map<String, dynamic> _toolInputFrom(String responseBody, String toolName) {
+    final Map<String, dynamic> decoded;
+    try {
+      decoded = jsonDecode(responseBody) as Map<String, dynamic>;
+    } catch (_) {
+      throw const MealInterpreterException('malformed response');
+    }
+
+    final content = decoded['content'];
+    if (content is! List) {
+      throw const MealInterpreterException('response has no content');
+    }
+
+    for (final block in content) {
+      if (block is! Map) continue;
+      if (block['type'] != 'tool_use') continue;
+      if (block['name'] != toolName) continue;
+
+      final input = block['input'];
+      if (input is! Map) {
+        throw const MealInterpreterException('tool call is not an object');
+      }
+      return Map<String, dynamic>.from(input);
+    }
+
+    throw MealInterpreterException(
+      'response has no tool call',
+      failure: MealInterpreterFailure.unsupported,
     );
   }
 

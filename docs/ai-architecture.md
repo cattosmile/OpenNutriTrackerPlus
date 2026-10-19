@@ -16,12 +16,13 @@ pays no provider.
 1. [The one rule that shapes everything](#the-one-rule-that-shapes-everything)
 2. [A typed meal, end to end](#a-typed-meal-end-to-end)
 3. [A photo, end to end](#a-photo-end-to-end)
-4. [Where a request goes](#where-a-request-goes)
-5. [Choosing a provider](#choosing-a-provider)
-6. [A server you run: the probe](#a-server-you-run-the-probe)
-7. [The guardrails](#the-guardrails)
-8. [What it deliberately does not do](#what-it-deliberately-does-not-do)
-9. [Code map](#code-map)
+4. [A label, end to end](#a-label-end-to-end)
+5. [Where a request goes](#where-a-request-goes)
+6. [Choosing a provider](#choosing-a-provider)
+7. [A server you run: the probe](#a-server-you-run-the-probe)
+8. [The guardrails](#the-guardrails)
+9. [What it deliberately does not do](#what-it-deliberately-does-not-do)
+10. [Code map](#code-map)
 
 ---
 
@@ -256,6 +257,46 @@ with it. Keeping the bare number is the worse failure: an estimated `200 g` of r
 logged as 200 servings. The row falls back to the amount an unquantified item gets, and you set
 it. The rule sits in the shared photo interpreter rather than in a client, so a provider added
 later inherits it.
+
+## A label, end to end
+
+The custom-food editor offers a sparkle action that reads a packaged food's label — a photo of
+the back (the nutrition table, required) and optionally the front, plus hints the user types:
+brand, supermarket, and their own portion. It is **the one place a model's reply may carry
+nutrition numbers**, and the carve-out is deliberate. The number on a package was measured by
+the manufacturer; the model transcribes it; every value lands in the edit-meal form for the user
+to check against the can in their hand before anything is saved. The rule one section up is
+unchanged — there the model would be inventing a number the diary then trusts; here it is
+copying one the user can verify at arm's length.
+
+Three steps, in [`ai_meal_scan_usecase.dart`](../lib/features/edit_meal/domain/usecase/ai_meal_scan_usecase.dart):
+
+1. **Read.** One model call with the photos. The prompt forbids estimating on this step — an
+   unreadable cell is omitted, never guessed. Its schema (`scanLabelToolSchema`, in
+   [`ai_meal_scan.dart`](../lib/features/edit_meal/domain/ai_meal_scan.dart)) carries the same
+   no-constrained-decoding stance as the items schema: enforcement is the Dart parser, which
+   drops unknown keys, negatives and non-finite values.
+2. **Research — no model in this step.** The barcode the OCR read and the name it read are
+   looked up in Open Food Facts and the Supabase mirror of USDA FDC / German BLS, through the
+   same `ProductsRepository` the search tab uses. Free, keyless for OFF, and structured
+   per-100 g — which is why this pair was chosen over a scraping or web-search API: both
+   databases are already wired into the app and answer in numbers rather than in prose a second
+   model would have to re-read.
+3. **Complete.** A text-only second call receives the label values, the database records and the
+   user's hints, and fills every nutrient by precedence: label values verbatim, then a close
+   database record, then estimation from food-composition knowledge.
+
+The provenance of each final value is **computed in Dart, not asked of the model**:
+`AiMealScanResult.build` tags every value Label / Database / Estimated from what each input
+actually contained, and a label value survives verbatim even when the merge call returned a
+different number for it — "the model preferred its own idea over the photograph" is the failure
+that ordering exists to prevent. The review card shows the tag per value, so the numbers worth
+double-checking are the ones that say *Estimated*.
+
+The seam these calls go through is [`StructuredToolApi`](../lib/features/add_meal/domain/structured_tool_api.dart)
+— implemented by the same three wire-format clients as `MealItemsApi`, so one Settings
+configuration serves both, and adding a provider still cannot add a second food-items schema:
+this is a second seam for a second contract, not a widening of the first.
 
 ## Where a request goes
 
@@ -532,7 +573,10 @@ address**. An IPv4-only check would never have seen where the connection actuall
 
 - **No inference the project runs, and no key the project holds.** You bring a credential or an
   address. The project pays nothing and is not in the request path.
-- **No nutrition number from a model**, ever — see [the one rule](#the-one-rule-that-shapes-everything).
+- **No nutrition number from a model** — see
+  [the one rule](#the-one-rule-that-shapes-everything). The label scan is the stated exception:
+  it transcribes the manufacturer's printed numbers into a form the user reviews before saving
+  ([A label, end to end](#a-label-end-to-end)).
 - **No on-device model.** The local tier is a deterministic parser, not a small model.
 - **No photo kept.** Not in the documents directory, not in an export, not for a retry.
 - **No silent provider substitution.** A provider name this build does not recognise refuses to
@@ -572,6 +616,10 @@ address**. An IPv4-only check would never have seen where the connection actuall
 | [`bulk_add_bloc.dart`](../lib/features/add_meal/presentation/bloc/bulk_add_bloc.dart) | Screen state |
 | [`bulk_add_state.dart`](../lib/features/add_meal/presentation/bloc/bulk_add_state.dart) | Rows, flags, and what a row is missing |
 | [`bulk_add_event.dart`](../lib/features/add_meal/presentation/bloc/bulk_add_event.dart) | What the screen can be asked to do |
+| [`structured_tool_api.dart`](../lib/features/add_meal/domain/structured_tool_api.dart) | The second seam: one forced tool call whose schema the caller defines |
+| [`ai_meal_scan.dart`](../lib/features/edit_meal/domain/ai_meal_scan.dart) | Label and merge schemas, prompts, Dart-side parsers, the source-tagged result |
+| [`ai_meal_scan_usecase.dart`](../lib/features/edit_meal/domain/usecase/ai_meal_scan_usecase.dart) | OCR → free database research → merge, and the research adapter over `ProductsRepository` |
+| [`ai_meal_scan_screen.dart`](../lib/features/edit_meal/presentation/screens/ai_meal_scan_screen.dart) | Photo pick with disclosure, hints, the review card, applying to the form |
 
 ---
 

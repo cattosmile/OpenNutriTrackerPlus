@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
 import 'package:opennutritracker/core/utils/plaintext_destination_guard.dart';
 import 'package:opennutritracker/features/add_meal/domain/meal_items_api.dart';
+import 'package:opennutritracker/features/add_meal/domain/structured_tool_api.dart';
 import 'package:opennutritracker/features/add_meal/util/meal_text_parser.dart';
 
 /// Asks a model for food items through OpenRouter, which brokers the request
@@ -76,7 +77,7 @@ class OpenRouterBroker {
 ///
 /// That is the opposite of the split from [AnthropicMealItemsApi], which
 /// exists because those two agree on nothing about shape.
-class OpenAiCompatibleMealItemsApi implements MealItemsApi {
+class OpenAiCompatibleMealItemsApi implements MealItemsApi, StructuredToolApi {
   static final _log = Logger('OpenAiCompatibleMealItemsApi');
 
   static final openRouterEndpoint = Uri.parse(
@@ -279,6 +280,99 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
         },
     });
 
+    final Map<String, dynamic> decoded = await _decodedFor(body);
+
+    _warnIfThePinDidNotHold(decoded);
+
+    return validateParsedMealItems(
+      _itemsFrom(decoded),
+      // Only the typed path corroborates: a photograph states no units at
+      // all, and its own counts-only filter already drops them.
+      statedIn: content is MealTextContent ? content.text : null,
+    );
+  }
+
+  /// One forced tool call whose schema the caller defines — see
+  /// [StructuredToolApi]. Photos travel as data-URI `image_url` parts after
+  /// the prompt text, the same order [requestItems] sends its single photo
+  /// in, because that is the order this destination's own image guidance
+  /// asks for.
+  @override
+  Future<Map<String, dynamic>> requestToolJson({
+    required String system,
+    required String userPrompt,
+    required List<MealPhoto> photos,
+    required String toolName,
+    required String toolDescription,
+    required Map<String, dynamic> toolSchema,
+  }) async {
+    final body = jsonEncode({
+      'model': model,
+      // A label transcription or a nutrient merge is a much larger reply
+      // than a list of food names — dozens of numbers — so the structured
+      // path gets four times the items budget, and eight when the reply has
+      // to share it with a reasoning trace.
+      'max_tokens': reasoningEffort == null
+          ? _structuredMaxTokens
+          : _structuredReasoningMaxTokens,
+      if (reasoningEffort case final effort?) ...{
+        'thinking': {'type': 'enabled'},
+        'reasoning_effort': effort,
+      },
+      'messages': [
+        {'role': 'system', 'content': system},
+        {
+          'role': 'user',
+          'content': [
+            {'type': 'text', 'text': userPrompt},
+            for (final photo in photos)
+              {
+                'type': 'image_url',
+                'image_url': {
+                  'url':
+                      'data:${photo.mediaType};base64,${base64Encode(photo.bytes)}',
+                },
+              },
+          ],
+        },
+      ],
+      'tools': [
+        {
+          'type': 'function',
+          'function': {
+            'name': toolName,
+            'description': toolDescription,
+            'parameters': toolSchema,
+          },
+        },
+      ],
+      if (toolChoice == ToolChoiceMode.namedFunction)
+        'tool_choice': {
+          'type': 'function',
+          'function': {'name': toolName},
+        }
+      else if (toolChoice == ToolChoiceMode.anyTool)
+        'tool_choice': 'required',
+      if (broker != null)
+        'provider': {
+          'require_parameters': true,
+          'data_collection': 'deny',
+          if (broker?.providers case final only?) ...{
+            'only': only,
+            'allow_fallbacks': false,
+          },
+        },
+    });
+
+    final decoded = await _decodedFor(body);
+    _warnIfThePinDidNotHold(decoded);
+    return _toolArgumentsFrom(decoded, toolName);
+  }
+
+  /// Posts [body] and returns the decoded JSON of the 200 reply — the
+  /// transport half of both request methods, extracted because it is the
+  /// half that never varies between them.
+  Future<Map<String, dynamic>> _decodedFor(String body) async {
     final http.Response response;
     try {
       response = await _client
@@ -346,16 +440,79 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
     } catch (_) {
       throw const MealInterpreterException('malformed response');
     }
+    return decoded;
+  }
 
-    _warnIfThePinDidNotHold(decoded);
+  /// The tool arguments of a [toolName] call, as the object the model meant
+  /// them to be.
+  ///
+  /// Shares the 200-that-is-not-a-success check and the string-or-object
+  /// arguments leniency with [requestItems]'s parser, because those are
+  /// facts about this destination's reply shape rather than about either
+  /// schema. Unlike that parser it requires an object: the structured
+  /// callers read named fields out of the result, so an arguments value
+  /// that is not a map has nothing to hand back.
+  Map<String, dynamic> _toolArgumentsFrom(
+    Map<String, dynamic> decoded,
+    String toolName,
+  ) {
+    final choices = decoded['choices'];
+    if (choices is! List || choices.isEmpty) {
+      throw const MealInterpreterException('response has no choices');
+    }
 
-    return validateParsedMealItems(
-      _itemsFrom(decoded),
-      // Only the typed path corroborates: a photograph states no units at
-      // all, and its own counts-only filter already drops them.
-      statedIn: content is MealTextContent ? content.text : null,
+    final choice = choices.first;
+    if (choice is! Map) {
+      throw const MealInterpreterException('response has no choices');
+    }
+
+    _throwIfFailedGeneration(choice);
+
+    final message = choice['message'];
+    final toolCalls = message is Map ? message['tool_calls'] : null;
+    if (toolCalls is! List) {
+      throw MealInterpreterException(
+        'response has no tool call',
+        failure: MealInterpreterFailure.unsupported,
+      );
+    }
+
+    for (final call in toolCalls) {
+      if (call is! Map) continue;
+      final function = call['function'];
+      if (function is! Map) continue;
+      if (function['name'] != toolName) continue;
+
+      final Object? decodedArguments;
+      final raw = function['arguments'];
+      if (raw is String) {
+        try {
+          decodedArguments = jsonDecode(raw);
+        } catch (_) {
+          throw const MealInterpreterException(
+            'tool call has malformed arguments',
+          );
+        }
+      } else {
+        decodedArguments = raw;
+      }
+      if (decodedArguments is! Map) {
+        throw const MealInterpreterException('tool call is not an object');
+      }
+      return Map<String, dynamic>.from(decodedArguments);
+    }
+
+    throw MealInterpreterException(
+      'response has no tool call',
+      failure: MealInterpreterFailure.unsupported,
     );
   }
+
+  /// Token budget for a structured (label-scan) reply.
+  static const _structuredMaxTokens = 4096;
+
+  /// The same budget when a reasoning trace has to share it.
+  static const _structuredReasoningMaxTokens = 8192;
 
   /// Checks that the provider named in the app is the one that answered.
   ///

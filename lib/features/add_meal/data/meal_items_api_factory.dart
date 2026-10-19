@@ -6,6 +6,7 @@ import 'package:opennutritracker/features/add_meal/data/anthropic_meal_items_api
 import 'package:opennutritracker/features/add_meal/data/openai_meal_items_api.dart';
 import 'package:opennutritracker/features/add_meal/data/openai_compatible_meal_items_api.dart';
 import 'package:opennutritracker/features/add_meal/domain/meal_items_api.dart';
+import 'package:opennutritracker/features/add_meal/domain/structured_tool_api.dart';
 
 /// Turns a stored selection into the client that will carry it.
 ///
@@ -149,3 +150,16 @@ MealItemsApi mealItemsApiFor(
     ),
   };
 }
+
+/// The same selection, as the structured-tool client the label scan uses.
+///
+/// Every branch of [mealItemsApiFor] constructs a class that implements
+/// both [MealItemsApi] and [StructuredToolApi] — one configuration, one
+/// wire format, two seams — so the client is already built and only the
+/// type has to change. The cast is checked by
+/// `structured_tool_api_factory_test.dart` for every provider, which is
+/// what keeps a future branch from quietly opting out of the second seam.
+StructuredToolApi structuredToolApiFor(
+  http.Client client,
+  AiSelection selection,
+) => mealItemsApiFor(client, selection) as StructuredToolApi;

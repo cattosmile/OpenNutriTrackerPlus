@@ -51,8 +51,11 @@ class EditMealBloc extends Bloc<EditMealEvent, EditMealState> {
   final CustomMealDataSource _customMealDataSource; // #267
   final ConfigRepository _configRepository;
 
-  EditMealBloc(this._getConfigUsecase, this._customMealDataSource, this._configRepository)
-      : super(EditMealInitial()) {
+  EditMealBloc(
+    this._getConfigUsecase,
+    this._customMealDataSource,
+    this._configRepository,
+  ) : super(EditMealInitial()) {
     on<InitializeEditMealEvent>((event, emit) async {
       emit(EditMealLoadingState());
 
@@ -60,10 +63,12 @@ class EditMealBloc extends Bloc<EditMealEvent, EditMealState> {
       final mode = CustomMealFormMode.fromString(
         await _configRepository.getCustomMealFormMode(),
       );
-      emit(EditMealLoadedState(
-        usesImperialUnits: config.usesImperialFoodUnits,
-        formMode: mode,
-      ));
+      emit(
+        EditMealLoadedState(
+          usesImperialUnits: config.usesImperialFoodUnits,
+          formMode: mode,
+        ),
+      );
     });
   }
 
@@ -85,16 +90,7 @@ class EditMealBloc extends Bloc<EditMealEvent, EditMealState> {
     String carbsText,
     String fatText,
     String proteinText, {
-    String? fiberText,
-    String? saturatedFatText,
-    String? sugarsText,
-    String? sodiumText,
-    String? calciumText,
-    String? ironText,
-    String? potassiumText,
-    String? magnesiumText,
-    String? vitaminDText,
-    String? vitaminB12Text,
+    Map<String, String?>? microTexts,
     String? barcodeOverride,
     String? localImagePathOverride,
     bool clearLocalImagePath = false,
@@ -108,21 +104,60 @@ class EditMealBloc extends Bloc<EditMealEvent, EditMealState> {
     double? fromTextOrOld(String? text, double? oldValue) =>
         multiplyIfNotNull(text?.toDoubleOrNull() ?? oldValue);
 
+    // Every micronutrient — the base three under the header plus each
+    // section field — routes through the same two-step lookup: the typed
+    // text wins, else the old entity's value carries over, and either way
+    // the base-quantity factor scales it to per-100g. Keys are the entity
+    // field names; micronutrientByKey is the read side of that contract.
+    final oldNutriments = oldMealEntity.nutriments;
+    double? micro(String key) =>
+        fromTextOrOld(microTexts?[key], oldNutriments.micronutrientByKey(key));
+
     final newMealNutriments = MealNutrimentsEntity(
       energyKcal100: multiplyIfNotNull(kcalText.toDoubleOrNull()),
       carbohydrates100: multiplyIfNotNull(carbsText.toDoubleOrNull()),
       fat100: multiplyIfNotNull(fatText.toDoubleOrNull()),
       proteins100: multiplyIfNotNull(proteinText.toDoubleOrNull()),
-      sugars100: fromTextOrOld(sugarsText, oldMealEntity.nutriments.sugars100),
-      saturatedFat100: fromTextOrOld(saturatedFatText, oldMealEntity.nutriments.saturatedFat100),
-      fiber100: fromTextOrOld(fiberText, oldMealEntity.nutriments.fiber100),
-      sodium100: fromTextOrOld(sodiumText, oldMealEntity.nutriments.sodium100),
-      calcium100: fromTextOrOld(calciumText, oldMealEntity.nutriments.calcium100),
-      iron100: fromTextOrOld(ironText, oldMealEntity.nutriments.iron100),
-      potassium100: fromTextOrOld(potassiumText, oldMealEntity.nutriments.potassium100),
-      magnesium100: fromTextOrOld(magnesiumText, oldMealEntity.nutriments.magnesium100),
-      vitaminD100: fromTextOrOld(vitaminDText, oldMealEntity.nutriments.vitaminD100),
-      vitaminB12100: fromTextOrOld(vitaminB12Text, oldMealEntity.nutriments.vitaminB12100),
+      sugars100: micro('sugars100'),
+      saturatedFat100: micro('saturatedFat100'),
+      fiber100: micro('fiber100'),
+      sodium100: micro('sodium100'),
+      calcium100: micro('calcium100'),
+      iron100: micro('iron100'),
+      potassium100: micro('potassium100'),
+      magnesium100: micro('magnesium100'),
+      vitaminD100: micro('vitaminD100'),
+      vitaminB12100: micro('vitaminB12100'),
+      monounsaturatedFat100: micro('monounsaturatedFat100'),
+      polyunsaturatedFat100: micro('polyunsaturatedFat100'),
+      transFat100: micro('transFat100'),
+      cholesterol100: micro('cholesterol100'),
+      phosphorus100: micro('phosphorus100'),
+      zinc100: micro('zinc100'),
+      chloride100: micro('chloride100'),
+      vitaminA100: micro('vitaminA100'),
+      vitaminC100: micro('vitaminC100'),
+      vitaminE100: micro('vitaminE100'),
+      vitaminK100: micro('vitaminK100'),
+      vitaminB1100: micro('vitaminB1100'),
+      vitaminB2100: micro('vitaminB2100'),
+      niacin100: micro('niacin100'),
+      vitaminB5100: micro('vitaminB5100'),
+      vitaminB6100: micro('vitaminB6100'),
+      vitaminB7100: micro('vitaminB7100'),
+      vitaminB9100: micro('vitaminB9100'),
+      choline100: micro('choline100'),
+      copper100: micro('copper100'),
+      manganese100: micro('manganese100'),
+      selenium100: micro('selenium100'),
+      iodine100: micro('iodine100'),
+      fluoride100: micro('fluoride100'),
+      chromium100: micro('chromium100'),
+      molybdenum100: micro('molybdenum100'),
+      ala100: micro('ala100'),
+      epa100: micro('epa100'),
+      dha100: micro('dha100'),
+      caffeine100: micro('caffeine100'),
     );
 
     return MealEntity(
@@ -159,6 +194,8 @@ class EditMealBloc extends Bloc<EditMealEvent, EditMealState> {
 
   /// Persist custom meal template so it appears in Recent Meals before first log (#267)
   Future<void> saveCustomMeal(MealEntity mealEntity) async {
-    await _customMealDataSource.saveCustomMeal(MealDBO.fromMealEntity(mealEntity));
+    await _customMealDataSource.saveCustomMeal(
+      MealDBO.fromMealEntity(mealEntity),
+    );
   }
 }

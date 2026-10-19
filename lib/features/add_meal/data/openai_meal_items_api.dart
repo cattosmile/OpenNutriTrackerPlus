@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:logging/logging.dart';
 import 'package:opennutritracker/features/add_meal/domain/meal_items_api.dart';
+import 'package:opennutritracker/features/add_meal/domain/structured_tool_api.dart';
 import 'package:opennutritracker/features/add_meal/util/meal_text_parser.dart';
 
 /// Asks an OpenAI model for food items, reached directly.
@@ -21,7 +22,7 @@ import 'package:opennutritracker/features/add_meal/util/meal_text_parser.dart';
 /// From GPT-5.4, tool calling is unsupported in Chat Completions with
 /// `reasoning: none`, so the alternative pays reasoning tokens on every meal
 /// line the user types. Settled in #681.
-class OpenAiMealItemsApi implements MealItemsApi {
+class OpenAiMealItemsApi implements MealItemsApi, StructuredToolApi {
   static final _log = Logger('OpenAiMealItemsApi');
 
   static const _endpoint = 'https://api.openai.com/v1/responses';
@@ -137,6 +138,131 @@ class OpenAiMealItemsApi implements MealItemsApi {
       statedIn: content is MealTextContent ? content.text : null,
     );
   }
+
+  /// One forced tool call whose schema the caller defines — see
+  /// [StructuredToolApi]. Photos travel before the prompt text, matching
+  /// [requestItems]'s single-photo order, which is the order this API's own
+  /// image guidance asks for.
+  @override
+  Future<Map<String, dynamic>> requestToolJson({
+    required String system,
+    required String userPrompt,
+    required List<MealPhoto> photos,
+    required String toolName,
+    required String toolDescription,
+    required Map<String, dynamic> toolSchema,
+  }) async {
+    final body = jsonEncode({
+      'model': model,
+      'instructions': system,
+      'input': [
+        {
+          'role': 'user',
+          'content': [
+            for (final photo in photos)
+              {
+                'type': 'input_image',
+                'image_url':
+                    'data:${photo.mediaType};base64,${base64Encode(photo.bytes)}',
+              },
+            {'type': 'input_text', 'text': userPrompt},
+          ],
+        },
+      ],
+      'tools': [
+        {
+          'type': 'function',
+          'name': toolName,
+          'description': toolDescription,
+          'parameters': toolSchema,
+          // Explicit for the reason [requestItems] spells out: omitted is
+          // not neutral here, it normalises into strict mode and 400s.
+          'strict': false,
+        },
+      ],
+      'tool_choice': {'type': 'function', 'name': toolName},
+      'store': false,
+      // A label transcription is dozens of numbers where the items call is a
+      // few short strings.
+      'max_output_tokens': _structuredMaxOutputTokens,
+    });
+
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse(_endpoint),
+            headers: {
+              'content-type': 'application/json',
+              'authorization': 'Bearer ${_apiKey()}',
+            },
+            body: body,
+          )
+          .timeout(timeout);
+    } catch (e) {
+      // Not logging `e`, matching both other clients: a socket error can
+      // carry part of the request, and on the photo path the request is the
+      // photograph.
+      throw const MealInterpreterException('request failed');
+    }
+
+    if (response.statusCode != 200) {
+      _log.warning('Interpreter call failed with ${response.statusCode}');
+      throw MealInterpreterException(
+        'provider returned ${response.statusCode}',
+        failure: _failureFor(response.statusCode, _errorFields(response.body)),
+        statusCode: response.statusCode,
+      );
+    }
+
+    final Map<String, dynamic> decoded;
+    try {
+      decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      throw const MealInterpreterException('malformed response');
+    }
+
+    return _toolArgumentsFrom(decoded, toolName);
+  }
+
+  /// The tool arguments of a [toolName] call, decoded from the JSON string
+  /// Responses carries them in. Requires an object — the structured callers
+  /// read named fields out of the result.
+  Map<String, dynamic> _toolArgumentsFrom(
+    Map<String, dynamic> decoded,
+    String toolName,
+  ) {
+    final output = decoded['output'];
+    if (output is! List) {
+      throw const MealInterpreterException('response has no output');
+    }
+
+    for (final entry in output) {
+      if (entry is! Map || entry['type'] != 'function_call') continue;
+      if (entry['name'] != toolName) continue;
+      final arguments = entry['arguments'];
+      if (arguments is! String) {
+        throw const MealInterpreterException('tool call has no arguments');
+      }
+      final Object? parsed;
+      try {
+        parsed = jsonDecode(arguments);
+      } catch (_) {
+        throw const MealInterpreterException('tool call arguments malformed');
+      }
+      if (parsed is! Map) {
+        throw const MealInterpreterException('tool call is not an object');
+      }
+      return Map<String, dynamic>.from(parsed);
+    }
+
+    throw MealInterpreterException(
+      'response carried no tool call',
+      failure: MealInterpreterFailure.unsupported,
+    );
+  }
+
+  static const _structuredMaxOutputTokens = 4096;
 
   /// Responses content. **Image before text**, matching the Anthropic client
   /// and the opposite of OpenRouter's, whose own image documentation asks for
