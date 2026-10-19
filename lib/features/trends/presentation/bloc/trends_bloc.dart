@@ -8,6 +8,7 @@ import 'package:opennutritracker/core/domain/usecase/get_tracked_day_usecase.dar
 import 'package:opennutritracker/core/domain/usecase/get_user_usecase.dart';
 import 'package:opennutritracker/core/domain/usecase/get_water_intake_usecase.dart';
 import 'package:opennutritracker/core/domain/usecase/get_weight_log_usecase.dart';
+import 'package:opennutritracker/core/utils/calc/day_boundary_calc.dart';
 
 part 'trends_event.dart';
 part 'trends_state.dart';
@@ -29,12 +30,24 @@ class TrendsBloc extends Bloc<TrendsEvent, TrendsState> {
     on<LoadTrendsEvent>((event, emit) async {
       emit(const TrendsLoading());
       try {
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
+        final config = await _getConfigUsecase.getConfig();
+        // Tracked-day rows are keyed by the configured day boundary, so
+        // the range anchors on the logical today — between midnight and
+        // the boundary that is the previous wall-clock day.
+        final today = DayBoundaryCalc.currentLogicalDayMinutes(
+          config.dayStartOffsetTotalMinutes,
+        );
         // Today's tracked day is stamped with the time it was created, so the
         // range end must cover the whole day or today drops out of the result
         // (the range filter is inclusive but compares against this instant).
-        final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        final endOfToday = DateTime(
+          today.year,
+          today.month,
+          today.day,
+          23,
+          59,
+          59,
+        );
         // rangeDays 0 is the "All" chip: pull a wide window and let the actual
         // span fall out of the earliest data point below.
         final isAll = event.rangeDays == 0;
@@ -51,16 +64,20 @@ class TrendsBloc extends Bloc<TrendsEvent, TrendsState> {
         // The 7 days before this week, for a week-over-week consistency delta.
         final priorWeek = await _getTrackedDayUsecase.getTrackedDaysByRange(
           today.subtract(const Duration(days: 13)),
-          DateTime(now.year, now.month, now.day - 7, 23, 59, 59),
+          DateTime(today.year, today.month, today.day - 7, 23, 59, 59),
         );
         final user = await _getUserUsecase.getUserData();
-        final config = await _getConfigUsecase.getConfig();
 
-        // Water totalled per calendar day; the card fills missing days with 0.
+        // Water totalled per logical day (same boundary as the tracked-day
+        // rows, so a glass logged at 00:30 lands on the day the diary
+        // shows it under); the card fills missing days with 0.
         final waterEntries = await _getWaterIntakeUsecase.getAllEntries();
         final waterByDay = <DateTime, int>{};
         for (final e in waterEntries) {
-          final d = DateTime(e.dateTime.year, e.dateTime.month, e.dateTime.day);
+          final d = DayBoundaryCalc.dayKeyFor(
+            e.dateTime,
+            config.dayStartOffsetTotalMinutes,
+          );
           waterByDay[d] = (waterByDay[d] ?? 0) + e.amountMl;
         }
 
@@ -76,6 +93,7 @@ class TrendsBloc extends Bloc<TrendsEvent, TrendsState> {
           void consider(DateTime d) {
             if (earliest == null || d.isBefore(earliest!)) earliest = d;
           }
+
           for (final d in days) {
             consider(DateTime(d.day.year, d.day.month, d.day.day));
           }
@@ -90,20 +108,22 @@ class TrendsBloc extends Bloc<TrendsEvent, TrendsState> {
               : (today.difference(earliest!).inDays + 1).clamp(2, 3650);
         }
 
-        emit(TrendsLoaded(
-          rangeDays: event.rangeDays,
-          windowDays: windowDays,
-          days: days,
-          priorWeek: priorWeek,
-          weight: weight,
-          bodyWeightUnit: config.bodyWeightUnit,
-          targetWeightKg: user.targetWeightKg,
-          waterByDay: waterByDay,
-          waterGoalMl: config.effectiveDailyWaterGoalMl(
-            user.gender,
-            caloriesProfile: user.caloriesProfile,
+        emit(
+          TrendsLoaded(
+            rangeDays: event.rangeDays,
+            windowDays: windowDays,
+            days: days,
+            priorWeek: priorWeek,
+            weight: weight,
+            bodyWeightUnit: config.bodyWeightUnit,
+            targetWeightKg: user.targetWeightKg,
+            waterByDay: waterByDay,
+            waterGoalMl: config.effectiveDailyWaterGoalMl(
+              user.gender,
+              caloriesProfile: user.caloriesProfile,
+            ),
           ),
-        ));
+        );
       } catch (e) {
         emit(TrendsFailed(e.toString()));
       }

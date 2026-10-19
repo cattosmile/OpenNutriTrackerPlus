@@ -21,6 +21,8 @@ MealEntity _meal({
   double? vitaminD,
   double? vitaminB12,
   double? magnesium,
+  double? epa,
+  double? dha,
 }) {
   return MealEntity(
     code: 'test',
@@ -47,6 +49,8 @@ MealEntity _meal({
       iron100: iron,
       vitaminD100: vitaminD,
       vitaminB12100: vitaminB12,
+      epa100: epa,
+      dha100: dha,
     ),
   );
 }
@@ -183,7 +187,7 @@ void main() {
         ),
       ];
 
-      final totals = NutrientPanelTotals.fromIntakes(intakes, weekly: true);
+      final totals = NutrientPanelTotals.fromIntakes(intakes, averageDays: 7);
 
       // fiber sum: 200×7/100 + 100×5/100 + 50×8/100 = 14 + 5 + 4 = 23
       // weekly average: 23 / 7 ≈ 3.2857
@@ -197,8 +201,10 @@ void main() {
     });
 
     test('empty week window yields zeros, not NaN', () {
-      final totals = NutrientPanelTotals.fromIntakes(<IntakeEntity>[],
-          weekly: true);
+      final totals = NutrientPanelTotals.fromIntakes(
+        const <IntakeEntity>[],
+        averageDays: 7,
+      );
       expect(totals.fiberG, 0.0);
       expect(totals.ironMg, 0.0);
       expect(totals.vitaminB12Mcg, 0.0);
@@ -208,12 +214,12 @@ void main() {
   group('ConfigEntity.isNutrientVisible', () {
     /// A minimal config — most fields don't matter for visibility behaviour.
     ConfigEntity withVisibility(Map<String, bool> v) => ConfigEntity(
-          false,
-          false,
-          false,
-          AppThemeEntity.system,
-          nutrientPanelVisibility: v,
-        );
+      false,
+      false,
+      false,
+      AppThemeEntity.system,
+      nutrientPanelVisibility: v,
+    );
 
     test('defaults to visible when the map is empty', () {
       final config = withVisibility(const {});
@@ -235,31 +241,68 @@ void main() {
     });
 
     test('honours explicit true overrides as a no-op', () {
-      final config = withVisibility(const {
-        NutrientPanelKeys.iron: true,
-      });
+      final config = withVisibility(const {NutrientPanelKeys.iron: true});
       expect(config.isNutrientVisible(NutrientPanelKeys.iron), isTrue);
     });
   });
 
   group('NutrientPanelKeys', () {
-    test('exposes all ten nutrient identifiers', () {
-      expect(NutrientPanelKeys.all, hasLength(10));
+    test('exposes all 35 nutrient identifiers, uniquely', () {
+      expect(NutrientPanelKeys.all, hasLength(35));
+      expect(NutrientPanelKeys.all.toSet(), hasLength(35));
+      // The extended set rides along with the base ten; the count above is
+      // the contract, the spot-checks below keep the names honest.
       expect(
-        NutrientPanelKeys.all.toSet(),
-        equals(<String>{
+        NutrientPanelKeys.all,
+        containsAll(<String>[
           NutrientPanelKeys.fiber,
           NutrientPanelKeys.sodium,
-          NutrientPanelKeys.saturatedFat,
-          NutrientPanelKeys.sugar,
-          NutrientPanelKeys.calcium,
-          NutrientPanelKeys.iron,
-          NutrientPanelKeys.potassium,
-          NutrientPanelKeys.vitaminD,
-          NutrientPanelKeys.vitaminB12,
           NutrientPanelKeys.magnesium,
-        }),
+          NutrientPanelKeys.zinc,
+          NutrientPanelKeys.choline,
+          NutrientPanelKeys.molybdenum,
+          NutrientPanelKeys.ala,
+          NutrientPanelKeys.epaDha,
+          NutrientPanelKeys.caffeine,
+        ]),
       );
+      // The individual EPA and DHA form fields stay detail-table-only —
+      // the panel carries their SUM as one row against EFSA's combined
+      // 250 mg reference.
+      expect(NutrientPanelKeys.all, isNot(contains('epa')));
+      expect(NutrientPanelKeys.all, isNot(contains('dha')));
+    });
+
+    test('EPA + DHA sums both fields and converts grams to milligrams', () {
+      final intakes = [
+        _intake(
+          amountGrams: 100,
+          meal: _meal(epa: 0.04, dha: 0.12), // 40 + 120 mg per 100 g
+        ),
+        _intake(
+          amountGrams: 50,
+          meal: _meal(epa: 0.02, dha: 0.08), // 20 + 80 mg per 100 g
+        ),
+      ];
+      // 100 g of (40+120) + 50 g of (20+80) = 160 + 50 = 210 mg.
+      expect(NutrientPanelTotals.epaDhaMg(intakes), closeTo(210.0, 1e-9));
+      // A seven-day window averages the same total.
+      expect(
+        NutrientPanelTotals.epaDhaMg(intakes, averageDays: 7),
+        closeTo(30.0, 1e-9),
+      );
+    });
+
+    test('the section grouping carries every panel key exactly once', () {
+      final order = nutrientPanelRowOrder();
+      // A permutation of the visibility keys — one missing key would
+      // silently drop a row from the panel, a duplicate would show it
+      // under two headers.
+      expect(order.toSet(), NutrientPanelKeys.all.toSet());
+      expect(order, hasLength(NutrientPanelKeys.all.length));
+      // The first two rows open the carbs section, the same fields the
+      // edit form leads with.
+      expect(order.take(2), [NutrientPanelKeys.fiber, NutrientPanelKeys.sugar]);
     });
   });
 }
