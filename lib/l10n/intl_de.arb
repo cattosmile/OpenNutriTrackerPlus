@@ -1357,5 +1357,95 @@
   "healthSyncDisclosureContinueAction": "Weiter",
   "healthSyncUnavailableLabel": "Gesundheitsdaten sind auf diesem Gerät nicht verfügbar. Der Trainingsimport benötigt Health Connect unter Android oder Apple Health unter iOS.",
   "sourcesEnergyCompensationTitle": "Anrechnung von Trainingskalorien",
-  "sourcesEnergyCompensationDescription": "Importierte Trainings werden mit weniger Energie angerechnet, als dein Gerät meldet. Menschen gleichen Sport aus, indem sie den Rest des Tages weniger Kalorien verbrennen – im Mittel etwa 28 %, bei höherem Körperfettanteil mehr. Der Vorschlag stammt aus dieser Forschung und lässt sich unter Einstellungen → Gesundheitsdaten-Sync ändern. Die Energie selbst meldet die App oder das Gerät, das das Training aufgezeichnet hat; sie wird nicht mit der MET-Formel der App berechnet."
+  "sourcesEnergyCompensationDescription": "Importierte Trainings werden mit weniger Energie angerechnet, als dein Gerät meldet. Menschen gleichen Sport aus, indem sie den Rest des Tages weniger Kalorien verbrennen – im Mittel etwa 28 %, bei höherem Körperfettanteil mehr. Der Vorschlag stammt aus dieser Forschung und lässt sich unter Einstellungen → Gesundheitsdaten-Sync ändern. Die Energie selbst meldet die App oder das Gerät, das das Training aufgezeichnet hat; sie wird nicht mit der MET-Formel der App berechnet.",
+  "aiScanTitle": "Verpacktes Lebensmittel auslesen",
+  "aiScanIntro": "Fotografiere die Rückseite der Verpackung mit der Nährwerttabelle — ein Frontfoto hilft bei Name und Marke. Das Etikett wird von KI transkribiert, das Produkt in kostenlosen Lebensmitteldatenbanken nachgeschlagen und fehlende Nährstoffe geschätzt. Du prüfst jeden Wert, bevor er ins Formular kommt.",
+  "aiScanFrontPhotoLabel": "Frontfoto (optional)",
+  "aiScanBackPhotoLabel": "Rückfoto (Nährwerttabelle)",
+  "aiScanSupermarketLabel": "Supermarkt (optional)",
+  "aiScanBrandLabel": "Marke (optional)",
+  "aiScanProductNameLabel": "Produktname (optional)",
+  "aiScanPortionLabel": "Deine Portion in g/ml (optional)",
+  "aiScanAnalyzeLabel": "Analysieren",
+  "aiScanStepReadingLabel": "Etikett wird gelesen…",
+  "aiScanStepResearchLabel": "Produkt wird nachgeschlagen…",
+  "aiScanStepCompletingLabel": "Nährstoffe werden ergänzt…",
+  "aiScanNoBackPhotoLabel": "Füge zuerst ein Foto der Verpackungsrückseite hinzu.",
+  "aiScanUnavailableLabel": "Aktiviere die KI-Mahlzeiten-Hilfe in den Einstellungen, um Etiketten zu lesen",
+  "aiScanKeyRejectedLabel": "Dein API-Schlüssel wurde abgelehnt. Prüfe ihn in den Einstellungen.",
+  "aiScanNoCreditLabel": "Diese Anfrage konnte nicht bezahlt werden: dem Anbieter-Konto ist das Guthaben ausgegangen. Lade dort Guthaben auf oder trage die Werte von Hand ein.",
+  "aiScanUnreadablePhotoLabel": "Dieses Bild konnte nicht gelesen werden. Versuche ein anderes Foto.",
+  "aiScanUnsupportedLabel": "Dieses Modell kann keine Fotos lesen. Wähle in den Einstellungen ein anderes.",
+  "aiScanInsecureServerLabel": "KI lief nicht: diese Adresse ist öffentlich und unverschlüsselt.",
+  "aiScanTimedOutLabel": "Dein Server hat nicht rechtzeitig geantwortet. Ein Modell, das zum ersten Mal lädt, kann ein bis zwei Minuten brauchen — versuche es erneut.",
+  "aiScanFailedLabel": "Etikett konnte nicht gelesen werden. Prüfe deine Verbindung und versuche es erneut.",
+  "aiScanResultTitle": "Prüfe die Werte",
+  "aiScanSourceLabelLabel": "Etikett",
+  "aiScanSourceDatabaseLabel": "Datenbank",
+  "aiScanSourceEstimatedLabel": "Geschätzt",
+  "aiScanApplyLabel": "In Formular übernehmen",
+  "aiScanDisclosureCommon": "OpenNutriTracker behält keine eigene Kopie, und sie landen nie in deinen Exporten.",
+  "aiScanDisclosureAnthropic": "Die Fotos werden an Anthropic gesendet, um die Nährwerttabelle zu lesen.",
+  "aiScanDisclosureZai": "Die Fotos werden an Z.ai gesendet, um die Nährwerttabelle zu lesen.",
+  "aiScanDisclosureOpenAI": "Die Fotos werden an OpenAI gesendet, um die Nährwerttabelle zu lesen. OpenAI speichert sie bis zu 30 Tage zur Missbrauchskontrolle — und länger, wenn das Gesetz es verlangt oder es zum Schutz ihrer Dienste erforderlich ist.",
+  "chlorideLabel": "Chlorid",
+  "vitaminELabel": "Vitamin E",
+  "vitaminKLabel": "Vitamin K",
+  "vitaminB1Label": "Thiamin (B1)",
+  "vitaminB2Label": "Riboflavin (B2)",
+  "vitaminB5Label": "Pantothensäure (B5)",
+  "vitaminB7Label": "Biotin (B7)",
+  "vitaminB9Label": "Folsäure (B9)",
+  "cholineLabel": "Cholin",
+  "copperLabel": "Kupfer",
+  "manganeseLabel": "Mangan",
+  "seleniumLabel": "Selen",
+  "iodineLabel": "Jod",
+  "fluorideLabel": "Fluorid",
+  "chromiumLabel": "Chrom",
+  "molybdenumLabel": "Molybdän",
+  "alaLabel": "Alpha-Linolensäure (ALA)",
+  "epaLabel": "Eicosapentaensäure (EPA)",
+  "dhaLabel": "Docosahexaensäure (DHA)",
+  "caffeineLabel": "Koffein",
+  "editMealCarbsSectionLabel": "Kohlenhydrate & Ballaststoffe",
+  "editMealFatsSectionLabel": "Fette & Cholesterin",
+  "editMealMineralsSectionLabel": "Mineralstoffe",
+  "editMealVitaminsSectionLabel": "Vitamine",
+  "editMealTraceElementsSectionLabel": "Spurenelemente",
+  "editMealOmega3SectionLabel": "Omega-3 & Koffein",
+  "trendsNutrientsTitle": "Durchschnittliche Nährwerte",
+  "aiScanBasedOnLabel": "Gestützt auf {name}",
+  "@aiScanBasedOnLabel": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "aiScanDisclosureOpenRouter": "Die Fotos werden an OpenRouter gesendet, das sie an {provider} weiterleitet, um die Nährwerttabelle zu lesen.",
+  "@aiScanDisclosureOpenRouter": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiScanDisclosureOwnServer": "Die Fotos werden an {host} gesendet, um die Nährwerttabelle zu lesen.",
+  "@aiScanDisclosureOwnServer": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsDefaultToRawFoodUnitsLabel": "Standardmäßig Gewicht oder Volumen, nicht Portionen",
+  "settingsDefaultToRawFoodUnitsSubtitle": "Wenn ein Lebensmittel eine Portion hat, wird es nach Gewicht oder Volumen geloggt. Portionen kannst du weiterhin im Einheiten-Dropdown wählen.",
+  "aiAssistDisclosureZai": "Mit gespeichertem Schlüssel wird der Text, den du auf dem Mehrfach-Hinzufügen-Bildschirm tippst — und jedes Foto, das du dort auslesen lässt — an Z.ai gesendet, das ihn unter seiner eigenen Richtlinie verarbeitet. Die Anfragen werden über deinen GLM Coding Plan abgerechnet, nicht über Guthaben nach Verbrauch.",
+  "aiAssistThinkingLabel": "Denk-Aufwand",
+  "bulkAddPhotoDisclosureZai": "Das Foto wird an Z.ai gesendet, um die Lebensmittel darin zu erkennen.",
+  "nutrientPanelLegendTitle": "So liest du die Balken",
+  "nutrientPanelLegendTarget": "Erreichen — fülle den Balken Richtung Tagesziel. Voller blauer Balken = Ziel erreicht; mehr davon ist unkritisch.",
+  "nutrientPanelLegendLimit": "Limit — bleib unter der Obergrenze. Orange: nah am Limit. Rot: überschritten.",
+  "epaDhaLabel": "EPA + DHA"
 }

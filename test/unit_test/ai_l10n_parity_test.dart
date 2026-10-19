@@ -73,6 +73,17 @@ void main() {
     'aiAssistModelsEmptyLabel',
     'aiAssistModelsRejectedLabel',
     'aiAssistModelsInsecureLabel',
+    // The label-scan pick sheet: one paragraph per destination, and the
+    // sentences that must stay distinct where they are translated.
+    'aiScanDisclosureAnthropic',
+    'aiScanDisclosureOpenRouter',
+    'aiScanDisclosureOpenAI',
+    'aiScanDisclosureZai',
+    'aiScanDisclosureOwnServer',
+    'aiScanSourceLabelLabel',
+    'aiScanSourceDatabaseLabel',
+    'aiScanSourceEstimatedLabel',
+    'aiScanBasedOnLabel',
   ];
   final arb = {
     for (final locale in locales)
