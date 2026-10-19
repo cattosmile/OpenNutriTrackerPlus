@@ -189,6 +189,22 @@ abstract final class AiModelCatalogue {
     ),
   ];
 
+  /// Z.ai's GLM models on the coding-plan endpoint — **multimodal entries
+  /// only.** The next feature builds on photo understanding, so a text-only
+  /// model here would offer a camera it cannot serve; the flagship
+  /// `glm-5.3` is deliberately absent for exactly that reason.
+  ///
+  /// Unlike the lists above, this one has not been behaviourally screened by
+  /// the project — no photo-corpus run exists for GLM — so no `note` is
+  /// asserted: every note above is a measurement. Flash leads because the
+  /// request for this provider named it; FlashX is the faster variant, and
+  /// Z.ai's docs place it outside the Coding Plan for now, where an
+  /// over-quota answer arrives as the billing failure rather than a surprise.
+  static const zai = <AiModel>[
+    AiModel(id: 'glm-5.3-flash', servedBy: 'Z.ai'),
+    AiModel(id: 'glm-5.3-flashx', servedBy: 'Z.ai'),
+  ];
+
   /// Empty for [AiProvider.ownServer], and that is the answer rather than a
   /// gap. Membership of the lists above requires a behavioural screen the
   /// project cannot run against a machine it has never seen, and the user
@@ -198,6 +214,7 @@ abstract final class AiModelCatalogue {
     AiProvider.anthropic => anthropic,
     AiProvider.openrouter => openrouter,
     AiProvider.openai => openai,
+    AiProvider.zai => zai,
     AiProvider.ownServer => const [],
   };
 

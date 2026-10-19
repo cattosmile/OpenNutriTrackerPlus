@@ -44,6 +44,10 @@ import 'package:opennutritracker/features/add_meal/domain/meal_items_api.dart';
 /// ceiling.
 const ownServerTimeout = Duration(seconds: 120);
 
+/// How long Z.ai is given to answer — reasoning time comes on top of the
+/// answer, so the hosted 20s is tuned for a speed these models do not have.
+const zaiTimeout = Duration(seconds: 60);
+
 /// How long a setup-time probe waits for an endpoint the user just typed.
 ///
 /// **Defined as [ownServerTimeout] rather than as its own number, and that
@@ -100,6 +104,24 @@ MealItemsApi mealItemsApiFor(
       key,
       model: modelId,
       timeout: timeout ?? OpenAiMealItemsApi.defaultTimeout,
+    ),
+    // Z.ai's GLM models on the coding-plan endpoint. The same wire format as
+    // OpenRouter without the broker — and with reasoning switched on, because
+    // GLM-5.3 cannot be asked not to think. The effort level is the user's
+    // choice in the dialog; unset reads as `high`, the level this provider
+    // was requested with.
+    //
+    // The longer budget is not a guess either: reasoning time comes on top of
+    // the answer, and 20s was tuned for models that reply immediately.
+    AiProvider.zai => OpenAiCompatibleMealItemsApi(
+      client,
+      key,
+      model: modelId,
+      endpoint: OpenAiCompatibleMealItemsApi.zaiEndpoint,
+      reasoningEffort:
+          (selection.reasoningEffort ?? AiReasoningEffort.high).name,
+      failureFor: OpenAiCompatibleMealItemsApi.zaiFailureFor,
+      timeout: timeout ?? zaiTimeout,
     ),
     // The user's own address, no broker, and **no forcing by name**: #733
     // measured that Ollama has no `tool_choice` field at all and llama.cpp

@@ -137,6 +137,56 @@ void main() {
       expect(jsonEncode(openai.headers), isNot(contains('sk-ant')));
       expect(jsonEncode(openai.headers), isNot(contains('sk-or')));
     });
+
+    test(
+      'Z.ai goes to the coding-plan endpoint, thinking switched on',
+      () async {
+        // The coding-plan path, not the self-served one: quota applies only
+        // there, so the URL is a billing decision and is asserted whole.
+        final client = await send(
+          const AiSelection(provider: AiProvider.zai, apiKey: 'sk-zai'),
+        );
+
+        expect(client.url!.host, 'api.z.ai');
+        expect(client.url!.path, '/api/coding/paas/v4/chat/completions');
+        expect(client.headers!['authorization'], 'Bearer sk-zai');
+        expect(client.headers!.containsKey('x-api-key'), isFalse);
+        expect(client.headers!.containsKey('x-openrouter-metadata'), isFalse);
+        expect(client.body!['model'], 'glm-5.3-flash');
+
+        // GLM-5.3 cannot be asked not to think; the effort level is the only
+        // control, and the body pair is what the endpoint documents.
+        expect(client.body!['thinking'], {'type': 'enabled'});
+        expect(client.body!['reasoning_effort'], 'high');
+        // The trace draws from the same budget as the tool call, so the
+        // reasoning path gets the larger one.
+        expect(client.body!['max_tokens'], greaterThan(1024));
+        // No broker in this path, so no routing block to send.
+        expect(client.body!.containsKey('provider'), isFalse);
+      },
+    );
+
+    test('the stored reasoning effort is the one that is sent', () async {
+      // Unset reads as `high` — the level the provider was requested with —
+      // and that default is covered by the test above.
+      final low = await send(
+        const AiSelection(
+          provider: AiProvider.zai,
+          apiKey: 'sk-zai',
+          reasoningEffort: AiReasoningEffort.low,
+        ),
+      );
+      final max = await send(
+        const AiSelection(
+          provider: AiProvider.zai,
+          apiKey: 'sk-zai',
+          reasoningEffort: AiReasoningEffort.max,
+        ),
+      );
+
+      expect(low.body!['reasoning_effort'], 'low');
+      expect(max.body!['reasoning_effort'], 'max');
+    });
   });
 
   group('the model the settings screen named is the model that is sent', () {
@@ -334,10 +384,7 @@ void main() {
       final openai =
           mealItemsApiFor(
                 CapturingClient(),
-                const AiSelection(
-                  provider: AiProvider.openai,
-                  apiKey: 'sk-oa',
-                ),
+                const AiSelection(provider: AiProvider.openai, apiKey: 'sk-oa'),
               )
               as OpenAiMealItemsApi;
 
@@ -349,6 +396,23 @@ void main() {
       expect(anthropic.timeout, hosted);
       expect(openrouter.timeout, hosted);
       expect(openai.timeout, hosted);
+    });
+
+    test('Z.ai sits between: reasoning time on top of the answer', () {
+      // The relations, not the literals: longer than a model that replies
+      // immediately needs, shorter than a cold load on borrowed hardware.
+      final zai =
+          mealItemsApiFor(
+                CapturingClient(),
+                const AiSelection(provider: AiProvider.zai, apiKey: 'sk-zai'),
+              )
+              as OpenAiCompatibleMealItemsApi;
+      expect(zai.timeout, zaiTimeout);
+      expect(
+        zai.timeout,
+        greaterThan(OpenAiCompatibleMealItemsApi.defaultTimeout),
+      );
+      expect(zai.timeout, lessThan(ownServerTimeout));
     });
 
     test('only the user\'s own server calls a timeout a timeout', () {

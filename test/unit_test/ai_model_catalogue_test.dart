@@ -31,18 +31,24 @@ void main() {
       // there instead, so "none" has to be representable. #755.
       expect(AiModelCatalogue.forProvider(AiProvider.ownServer), isEmpty);
       expect(AiModelCatalogue.defaultFor(AiProvider.ownServer), isNull);
-      expect(AiModelCatalogue.resolve(AiProvider.ownServer, 'gemma3:4b'), isNull);
+      expect(
+        AiModelCatalogue.resolve(AiProvider.ownServer, 'gemma3:4b'),
+        isNull,
+      );
     });
 
-    test('adding cheaper OpenAI models did not move the OpenRouter default', () {
-      // Reordering would send the food photographs of everyone who never
-      // opened the picker to a different company, with no interaction, after
-      // the photo sheet had named the old one — it interpolates `servedBy`.
-      // #688 refused a smaller version of this.
-      final unchosen = AiModelCatalogue.resolve(AiProvider.openrouter, null)!;
-      expect(unchosen.id, 'anthropic/claude-sonnet-5');
-      expect(unchosen.servedBy, 'Anthropic');
-    });
+    test(
+      'adding cheaper OpenAI models did not move the OpenRouter default',
+      () {
+        // Reordering would send the food photographs of everyone who never
+        // opened the picker to a different company, with no interaction, after
+        // the photo sheet had named the old one — it interpolates `servedBy`.
+        // #688 refused a smaller version of this.
+        final unchosen = AiModelCatalogue.resolve(AiProvider.openrouter, null)!;
+        expect(unchosen.id, 'anthropic/claude-sonnet-5');
+        expect(unchosen.servedBy, 'Anthropic');
+      },
+    );
 
     test('a retired id falls back rather than 404ing forever', () {
       expect(
@@ -62,6 +68,11 @@ void main() {
           isNull,
           reason: '${provider.name} head is labelled Recommended by position',
         );
+        // Scoped to the behaviourally screened lists, whose notes are
+        // measurements. Z.ai's rows carry none on purpose — nothing has been
+        // measured for GLM, and a note is exactly the claim a row must not
+        // make without that.
+        if (provider == AiProvider.zai) continue;
         for (final model in models.skip(1)) {
           expect(
             model.note,
@@ -77,10 +88,9 @@ void main() {
       // is the bug #726 fixed: the label was keyed on the provider, so every
       // non-default row said the same thing whether or not it was true.
       for (final provider in AiProvider.values) {
-        final notes = AiModelCatalogue.forProvider(provider)
-            .map((m) => m.note)
-            .whereType<AiModelNote>()
-            .toList();
+        final notes = AiModelCatalogue.forProvider(
+          provider,
+        ).map((m) => m.note).whereType<AiModelNote>().toList();
         expect(notes.toSet().length, notes.length, reason: provider.name);
       }
     });

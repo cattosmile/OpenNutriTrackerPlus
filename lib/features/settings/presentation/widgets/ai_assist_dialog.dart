@@ -144,6 +144,9 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
   bool _enabled = false;
   AiModel? _model = AiModelCatalogue.defaultFor(AiProvider.anthropic);
 
+  /// The GLM reasoning-effort choice; only rendered for Z.ai.
+  AiReasoningEffort _thinking = AiReasoningEffort.high;
+
   /// Set when OK was pressed on something that cannot be stored, and cleared
   /// as soon as the user touches the field again.
   ///
@@ -283,6 +286,9 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     // refuses independently of what this dialog is showing. #753.
     final provider = summary.provider ?? AiProvider.anthropic;
     final modelId = await widget.storage.readModel(provider: provider);
+    final thinking =
+        await widget.storage.readThinkingLevel(provider: provider) ??
+        AiReasoningEffort.high;
     // Asked separately from `configured`, because for a server the user runs
     // they are different questions and only this one may mask a field.
     final hasKey = summary.provider == null
@@ -307,6 +313,7 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
       _configured = summary.provider == null ? false : summary.configured;
       _enabled = summary.enabled;
       _model = AiModelCatalogue.resolve(provider, modelId);
+      _thinking = thinking;
       _endpointController.text = summary.endpoint ?? '';
       _modelController.text = modelId ?? '';
       // The stored address counts as already asked-about, so returning to a
@@ -546,6 +553,19 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     });
   }
 
+  /// Immediate, like the model choice: both are facts about the provider
+  /// rather than typed credentials, and neither has a failure mode that a
+  /// second look at the field would catch.
+  Future<void> _selectThinking(AiReasoningEffort effort) async {
+    final provider = _provider;
+    await widget.storage.writeThinkingLevel(effort, provider: provider);
+    if (!mounted || provider != _provider) return;
+    setState(() {
+      _thinking = effort;
+      _changed = true;
+    });
+  }
+
   /// Picking from the fetched list fills the field the user could have typed
   /// into, rather than writing straight to the store.
   ///
@@ -779,12 +799,15 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     return literal != null && !isPrivateDestination(literal);
   }
 
-  String _providerName(BuildContext context, AiProvider provider) =>
-      switch (provider) {
+  String _providerName(
+    BuildContext context,
+    AiProvider provider,
+  ) => switch (provider) {
     // Brand names, deliberately not localized.
     AiProvider.anthropic => 'Anthropic',
     AiProvider.openrouter => 'OpenRouter',
     AiProvider.openai => 'OpenAI',
+    AiProvider.zai => 'Z.ai',
     // The only one that is not a brand, so the only one that is localized.
     // **Never "local"**: that word is simultaneously what the ecosystem calls
     // Ollama and what a user reads as *on my phone* — the claim reserved for
@@ -1006,19 +1029,29 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
                     // to send to; picking a model is the step after deciding
                     // you can talk to them at all.
                     _buildModelSection(context, s, theme),
+                    if (_provider == AiProvider.zai) ...[
+                      const SizedBox(height: 16),
+                      _buildThinkingSection(s, theme),
+                    ],
                     // Directly under the pair it is a fact about. A stored
                     // verdict describes `(endpoint, model)` and is discarded
                     // when either changes, so reading it anywhere further from
                     // those two fields would invite it to be read as a
                     // property of the provider.
                     //
-                    // Only for a server the user runs. The other three were
-                    // screened behaviourally over live calls before they were
-                    // ever offered (#735), so there is nothing here a check
-                    // would establish that the curated list does not already
-                    // carry — and an inert "not checked yet" on the Anthropic
-                    // path would imply otherwise.
-                    if (_provider == AiProvider.ownServer && _configured) ...[
+                    // For a server the user runs and for Z.ai. The hosted
+                    // three were screened behaviourally over live calls
+                    // before they were ever offered (#735), so there is
+                    // nothing a check would establish there that the curated
+                    // list does not already carry — and an inert "not checked
+                    // yet" on the Anthropic path would imply otherwise. Z.ai
+                    // is on the other side of that line exactly as a pulled
+                    // server is: its list is unscreened, the key is the whole
+                    // of what "configured" means, and the user asked for a
+                    // confirmation that the combination actually answers.
+                    if ((_provider == AiProvider.ownServer ||
+                            _provider == AiProvider.zai) &&
+                        _configured) ...[
                       const SizedBox(height: 16),
                       _buildProbeSection(s, theme),
                     ],
@@ -1132,9 +1165,10 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
       AiModelListFailure.rejected => s.aiAssistModelsRejectedLabel(host),
       // A list did come back. Only its being empty is worth a sentence — a
       // list with entries in it speaks for itself, in the picker below.
-      null => _modelIds != null && _modelIds!.isEmpty
-          ? s.aiAssistModelsEmptyLabel(host)
-          : null,
+      null =>
+        _modelIds != null && _modelIds!.isEmpty
+            ? s.aiAssistModelsEmptyLabel(host)
+            : null,
     };
   }
 
@@ -1241,9 +1275,8 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
   _ProbeRowState _rowStateFor(AiCapability capability) => switch (capability) {
     AiCapability.passed => _ProbeRowState.passed,
     AiCapability.failed => _ProbeRowState.failed,
-    AiCapability.unknown => _probe.checked
-        ? _ProbeRowState.noAnswer
-        : _ProbeRowState.neverChecked,
+    AiCapability.unknown =>
+      _probe.checked ? _ProbeRowState.noAnswer : _ProbeRowState.neverChecked,
   };
 
   /// One capability, its verdict, and what that verdict means for the user.
@@ -1342,6 +1375,28 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
   /// OpenAI-served entries on the OpenRouter list — so the per-row branch
   /// below is reachable in production for the first time, and the grouped
   /// line is now the special case rather than the rule.
+  /// The GLM reasoning-effort picker. Z.ai only — the hosted three have no
+  /// such parameter and a server the user runs speaks for itself.
+  Widget _buildThinkingSection(S s, ThemeData theme) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _label(theme, s.aiAssistThinkingLabel),
+      Semantics(
+        identifier: 'ai-assist-thinking-level',
+        // SegmentedButton publishes its own button role per segment; the
+        // wrapper carries only the stable handle for UI drivers.
+        child: SegmentedButton<AiReasoningEffort>(
+          segments: [
+            for (final effort in AiReasoningEffort.values)
+              ButtonSegment(value: effort, label: Text(effort.name)),
+          ],
+          selected: {_thinking},
+          onSelectionChanged: (selection) => _selectThinking(selection.first),
+        ),
+      ),
+    ],
+  );
+
   Widget _buildModelSection(BuildContext context, S s, ThemeData theme) {
     final models = AiModelCatalogue.forProvider(_provider);
     if (models.isEmpty) {

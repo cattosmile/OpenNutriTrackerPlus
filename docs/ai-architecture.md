@@ -264,6 +264,7 @@ flowchart LR
     App["OpenNutriTracker"]
     App -->|"https, compiled in"| A["Anthropic<br/>api.anthropic.com"]
     App -->|"https, compiled in"| O["OpenAI<br/>api.openai.com"]
+    App -->|"https, compiled in"| Z["Z.ai<br/>api.z.ai"]
     App -->|"https, compiled in"| R["OpenRouter<br/>a broker"]
     App -->|"the address you type"| S["A server you run<br/>Ollama · LM Studio · llama.cpp · vLLM"]
     R -->|"pinned, fallbacks off"| RA["Anthropic"]
@@ -290,8 +291,8 @@ above can be checked at runtime instead of asserted. A mismatch is logged and no
 reply is still a valid answer to the question asked, and losing someone's meal entry over a
 routing discrepancy would be the worse outcome.
 
-Three of the four destinations are compiled-in `https://` URLs and cannot be redirected. The
-fourth is an address you supply, and there plaintext is the ordinary case rather than an edge one:
+Four of the five destinations are compiled-in `https://` URLs and cannot be redirected. The
+fifth is an address you supply, and there plaintext is the ordinary case rather than an edge one:
 the field's own example is `http://192.168.1.5:11434`, and the dialog carries a separate
 disclosure sentence for an unencrypted address precisely because that is what people save. So the
 guard is not deciding *whether* plaintext happens but *where it may go* — see
@@ -352,16 +353,17 @@ the app on OpenRouter's public leaderboard, and saving a key is not consent to b
 
 ## Choosing a provider
 
-Four providers, differing along two axes that do not line up:
+Five providers, differing along two axes that do not line up:
 
 | | Reached | Credential | Model |
 |---|---|---|---|
 | **Anthropic** | directly | API key | curated list |
 | **OpenAI** | directly | API key | curated list |
+| **Z.ai** | directly, coding-plan endpoint | API key | curated list |
 | **OpenRouter** | via a broker, then a vendor | API key | curated list, each vendor-pinned |
 | **A server you run** | directly, at your address | address; key optional | whatever the server offers |
 
-The odd one out is the fourth, and it is odd in a way that reached deep into the code: its
+The odd one out is the fifth, and it is odd in a way that reached deep into the code: its
 credential is an **address**, not a key, and a key is optional. Everything that had previously
 treated *"has a key"* as the test of whether the feature is usable had to learn a broader
 question.
@@ -403,7 +405,14 @@ server you run gets 120. That is not a guess: a real Ollama on an M4 Mac mini se
 was measured at 22–24 seconds from cold and 8–17 warm, and Ollama unloads after five idle minutes
 by default — so *"the first request of the meal"* is the ordinary case, not an edge one. The
 margin is generous because the measurement came from the fast end of the hardware range this
-provider exists to serve.
+provider exists to serve. Z.ai sits between at 60: its GLM models reason before answering, and
+the trace counts against the same token budget as the tool call, so a 20-second ceiling tuned
+for models that reply immediately would report working requests as failures.
+
+**Z.ai is also the one destination whose URL is a billing decision.** The coding-plan endpoint
+(`api.z.ai/api/coding/paas/v4`) is where a GLM Coding Plan's quota applies; the self-served
+equivalent spends pay-as-you-go credit. The endpoint is compiled in precisely so that choice
+cannot be made accidentally.
 
 ## A server you run: the probe
 
@@ -541,7 +550,7 @@ address**. An IPv4-only check would never have seen where the connection actuall
 | [`meal_interpreter_exception.dart`](../lib/features/add_meal/domain/meal_interpreter_exception.dart) | The failure kinds every client classifies into |
 | [`anthropic_meal_items_api.dart`](../lib/features/add_meal/data/anthropic_meal_items_api.dart) | Anthropic Messages wire format |
 | [`openai_meal_items_api.dart`](../lib/features/add_meal/data/openai_meal_items_api.dart) | OpenAI Responses wire format |
-| [`openai_compatible_meal_items_api.dart`](../lib/features/add_meal/data/openai_compatible_meal_items_api.dart) | Chat-completions format — serves OpenRouter and your own server |
+| [`openai_compatible_meal_items_api.dart`](../lib/features/add_meal/data/openai_compatible_meal_items_api.dart) | Chat-completions format — serves OpenRouter, Z.ai, and your own server |
 | [`meal_items_api_factory.dart`](../lib/features/add_meal/data/meal_items_api_factory.dart) | The whole of provider selection, plus per-provider timeouts |
 | [`model_meal_text_interpreter.dart`](../lib/features/add_meal/data/model_meal_text_interpreter.dart) | Prompt and locale handling for text |
 | [`model_meal_photo_interpreter.dart`](../lib/features/add_meal/data/model_meal_photo_interpreter.dart) | The same for photos |

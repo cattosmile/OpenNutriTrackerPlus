@@ -83,7 +83,21 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
     'https://openrouter.ai/api/v1/chat/completions',
   );
 
+  /// The coding-plan chat-completions endpoint. Compiled in for the same
+  /// reason the other hosted endpoints are — but with a sharper edge: Z.ai
+  /// bills the subscription quota **only** on this path, so a typo'd
+  /// self-served URL would silently spend pay-as-you-go credit instead.
+  static final zaiEndpoint = Uri.parse(
+    'https://api.z.ai/api/coding/paas/v4/chat/completions',
+  );
+
   static const _maxTokens = 1024;
+
+  /// Token budget for models that reason before answering — the reasoning
+  /// trace draws from the same budget as the tool call, so 1024 can truncate
+  /// the reply before any items exist. Only set alongside
+  /// [reasoningEffort], which is the only path that has measured a budget.
+  static const _reasoningMaxTokens = 4096;
 
   static const defaultTimeout = Duration(seconds: 20);
 
@@ -132,6 +146,16 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
   /// the behaviour that was deliberate for them.
   final MealInterpreterFailure timeoutFailure;
 
+  /// Z.ai's reasoning-effort level (`low` / `high` / `max`), or null for
+  /// destinations without one.
+  ///
+  /// GLM-5.3 models always think — the wire has no "off" — so this is the
+  /// only control, and the pair of body fields it emits (`thinking:
+  /// {"type": "enabled"}` plus itself) is what the coding-plan endpoint
+  /// documents. Sending them anywhere else would be a claim about that
+  /// destination's API the app has not made.
+  final String? reasoningEffort;
+
   OpenAiCompatibleMealItemsApi(
     this._client,
     this._apiKey, {
@@ -142,6 +166,7 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
     this.failureFor = openRouterFailureFor,
     this.timeout = defaultTimeout,
     this.timeoutFailure = MealInterpreterFailure.transient,
+    this.reasoningEffort,
   });
 
   /// The OpenRouter configuration, named so call sites read as intent rather
@@ -168,7 +193,11 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
   }) async {
     final body = jsonEncode({
       'model': model,
-      'max_tokens': _maxTokens,
+      'max_tokens': reasoningEffort == null ? _maxTokens : _reasoningMaxTokens,
+      if (reasoningEffort case final effort?) ...{
+        'thinking': {'type': 'enabled'},
+        'reasoning_effort': effort,
+      },
       // No top-level `system` field here: the OpenAI-compatible shape wants
       // it as the first message.
       'messages': [
@@ -224,29 +253,30 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
         }
       else if (toolChoice == ToolChoiceMode.anyTool)
         'tool_choice': 'required',
-      if (broker != null) 'provider': {
-        // Without this, OpenRouter documents that a provider which does not
-        // support a parameter still receives the request and ignores it —
-        // and `tool_choice` is not in the set it steers by. A dropped
-        // `tool_choice` means a prose answer this client cannot read, which
-        // would surface as "malformed response" rather than as the
-        // capability problem it is. With it, an unfit provider is refused up
-        // front with a 404 the user can be told about.
-        'require_parameters': true,
-        // Routing default is `allow`, meaning providers that store input
-        // non-transiently and may train on it are eligible. The app cannot
-        // promise a destination's behaviour it never asked for.
-        //
-        // Enforced here as a policy field rather than by reading the slug:
-        // free *usage* triggers the training clauses, not the `:free`
-        // suffix, so slug inspection would be a check that looks like one
-        // and is not.
-        'data_collection': 'deny',
-        if (broker?.providers case final only?) ...{
-          'only': only,
-          'allow_fallbacks': false,
+      if (broker != null)
+        'provider': {
+          // Without this, OpenRouter documents that a provider which does not
+          // support a parameter still receives the request and ignores it —
+          // and `tool_choice` is not in the set it steers by. A dropped
+          // `tool_choice` means a prose answer this client cannot read, which
+          // would surface as "malformed response" rather than as the
+          // capability problem it is. With it, an unfit provider is refused up
+          // front with a 404 the user can be told about.
+          'require_parameters': true,
+          // Routing default is `allow`, meaning providers that store input
+          // non-transiently and may train on it are eligible. The app cannot
+          // promise a destination's behaviour it never asked for.
+          //
+          // Enforced here as a policy field rather than by reading the slug:
+          // free *usage* triggers the training clauses, not the `:free`
+          // suffix, so slug inspection would be a check that looks like one
+          // and is not.
+          'data_collection': 'deny',
+          if (broker?.providers case final only?) ...{
+            'only': only,
+            'allow_fallbacks': false,
+          },
         },
-      },
     });
 
     final http.Response response;
@@ -491,6 +521,21 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi {
         // credits." Separate from the 429 below, `rate_limit_exceeded`,
         // which clears on its own where this one does not.
         402 => MealInterpreterFailure.billing,
+        404 => MealInterpreterFailure.unsupported,
+        _ => MealInterpreterFailure.transient,
+      };
+
+  /// What Z.ai's status codes mean on the coding-plan endpoint.
+  ///
+  /// Sibling of [openRouterFailureFor] with one measured-by-documentation
+  /// difference: a coding plan that ran out of weekly quota answers **429**
+  /// the way OpenRouter's 402 does — a state that does not clear on its own
+  /// and whose remedy ("check your plan") is not "try again".
+  static MealInterpreterFailure zaiFailureFor(int statusCode) =>
+      switch (statusCode) {
+        401 || 403 => MealInterpreterFailure.auth,
+        400 || 422 => MealInterpreterFailure.rejected,
+        402 || 429 => MealInterpreterFailure.billing,
         404 => MealInterpreterFailure.unsupported,
         _ => MealInterpreterFailure.transient,
       };

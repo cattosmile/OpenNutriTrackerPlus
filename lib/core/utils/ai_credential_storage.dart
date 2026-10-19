@@ -11,6 +11,10 @@ enum AiProvider {
   openrouter,
   openai,
 
+  /// Z.ai's GLM models on the coding-plan endpoint, reached at a compiled-in
+  /// address with an API key as the credential.
+  zai,
+
   /// A server the user runs — Ollama, LM Studio, llama.cpp, vLLM — reached at
   /// an address they supply.
   ///
@@ -48,6 +52,25 @@ enum AiProvider {
   }
 }
 
+/// How hard a reasoning model is allowed to think before it answers.
+///
+/// Exists for the GLM models, which cannot be asked *not* to think — the
+/// level is the only control, and an unset one reads as [high] rather than
+/// as "off". The enum name is persisted verbatim, like [AiProvider.name].
+enum AiReasoningEffort {
+  low,
+  high,
+  max;
+
+  static AiReasoningEffort? fromTag(String? value) {
+    if (value == null || value.isEmpty) return null;
+    for (final effort in AiReasoningEffort.values) {
+      if (effort.name == value) return effort;
+    }
+    return null;
+  }
+}
+
 /// Everything one request needs in order to be addressed: who is answering,
 /// with which credential, using which model.
 ///
@@ -69,11 +92,16 @@ class AiSelection {
   /// rather than here, so retiring a model is a change in one file.
   final String? modelId;
 
+  /// Null for providers that take no level — everything but the GLM models,
+  /// which read a null as their default of `high` at the factory.
+  final AiReasoningEffort? reasoningEffort;
+
   const AiSelection({
     required this.provider,
     this.apiKey,
     this.endpoint,
     this.modelId,
+    this.reasoningEffort,
   });
 }
 
@@ -287,6 +315,12 @@ class AiCredentialStorage {
   /// What a setup-time probe found this destination could do (#735).
   static const _probeTag = 'AiProbeTag';
 
+  /// The GLM reasoning-effort choice, per provider.
+  static const _thinkingTag = 'AiThinkingTag';
+
+  static String _thinkingSlotTag(AiProvider provider) =>
+      '$_thinkingTag.${provider.name}';
+
   static String _slotTag(AiProvider provider) =>
       '$_legacyApiKeyTag.${provider.name}';
 
@@ -373,6 +407,7 @@ class AiCredentialStorage {
       String? apiKey,
       String? endpoint,
       String? modelId,
+      AiReasoningEffort? reasoningEffort,
       bool enabled,
     })
   >
@@ -384,6 +419,7 @@ class AiCredentialStorage {
         apiKey: null,
         endpoint: null,
         modelId: null,
+        reasoningEffort: null,
         enabled: false,
       );
     }
@@ -427,11 +463,20 @@ class AiCredentialStorage {
           ) &&
           await _storage.read(key: _termsAcceptedTag) == 'true' &&
           await _storage.read(key: _enabledTag) != 'false';
+      // Only the GLM path consumes a level; reading the slot for the
+      // providers that cannot would be a platform round trip spent on
+      // nothing, and the storage tests count these.
+      final reasoningEffort = target == AiProvider.zai
+          ? AiReasoningEffort.fromTag(
+              await _storage.read(key: _thinkingSlotTag(target)),
+            )
+          : null;
       return (
         provider: target,
         apiKey: apiKey,
         endpoint: endpoint,
         modelId: modelId,
+        reasoningEffort: reasoningEffort,
         enabled: enabled,
       );
     });
@@ -603,7 +648,8 @@ class AiCredentialStorage {
   }) => switch (provider) {
     AiProvider.anthropic ||
     AiProvider.openrouter ||
-    AiProvider.openai => apiKey != null,
+    AiProvider.openai ||
+    AiProvider.zai => apiKey != null,
     // **And the model**, which is where #738's "the model is part of what
     // configured means here" is finally enforced rather than asserted. The
     // three hosted providers fall back to a curated default; this one has no
@@ -814,6 +860,7 @@ class AiCredentialStorage {
       String? apiKey,
       String? endpoint,
       String? modelId,
+      AiReasoningEffort? reasoningEffort,
       bool enabled,
     })
     state,
@@ -829,6 +876,7 @@ class AiCredentialStorage {
       apiKey: state.apiKey,
       endpoint: state.endpoint,
       modelId: state.modelId,
+      reasoningEffort: state.reasoningEffort,
     );
   }
 
@@ -845,6 +893,27 @@ class AiCredentialStorage {
     if (target == null) return null;
     final value = await _storage.read(key: _modelSlotTag(target));
     return (value == null || value.isEmpty) ? null : value;
+  }
+
+  /// Which reasoning effort [provider] should think at, or null for the
+  /// default. Only the GLM models ask the question; a null is read as `high`
+  /// where it is used, never written back as one.
+  Future<AiReasoningEffort?> readThinkingLevel({AiProvider? provider}) async {
+    final target = await _target(provider);
+    if (target == null) return null;
+    return AiReasoningEffort.fromTag(
+      await _storage.read(key: _thinkingSlotTag(target)),
+    );
+  }
+
+  /// Stores the reasoning effort for [provider].
+  Future<void> writeThinkingLevel(
+    AiReasoningEffort effort, {
+    AiProvider? provider,
+  }) async {
+    final target = await _target(provider);
+    if (target == null) return;
+    await _storage.write(key: _thinkingSlotTag(target), value: effort.name);
   }
 
   /// Stores the model, and **forgets what the probe found when the model

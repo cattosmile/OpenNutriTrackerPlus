@@ -39,6 +39,10 @@ enum MealPhotoFormat {
   /// rather than inherit whichever answer a wildcard happened to give it.
   static MealPhotoFormat forProvider(AiProvider provider) => switch (provider) {
     AiProvider.anthropic || AiProvider.openrouter || AiProvider.openai => webp,
+    // Z.ai documents jpg/jpeg/png for its vision inputs and says nothing
+    // about WebP, so it gets the format every runtime decodes rather than
+    // the one that is merely smaller.
+    AiProvider.zai => jpeg,
     AiProvider.ownServer => jpeg,
   };
 }
