@@ -1,0 +1,75 @@
+name: iOS dev build
+
+# Unsigned develop-flavor IPA as a downloadable artifact, for sideloading
+# with Sideloadly or AltStore — those re-sign with a personal Apple ID,
+# so no paid developer account and no repo secrets are required.
+#
+# Manual dispatch only: the push run of default_workflow.yml already
+# compile-validates the same tree via its no-codesign ios-build job, so
+# triggering this per push would just buy a second macOS runner.
+#
+# Supabase/Sentry values come from repo secrets when set (same names as
+# default_workflow.yml uses); otherwise the same CI stubs apply and the
+# app falls back to Open Food Facts + custom meals for food search.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter + cache packages
+        uses: ./.github/actions/setup-flutter-cache
+
+      # Same reason as ios-build in default_workflow.yml: SPM package
+      # products demand a signing identity even with codesigning disabled.
+      - name: Disable Swift Package Manager
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v6
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Generate .env
+        uses: ./.github/actions/write-env-file
+        with:
+          sentry_dns: ${{ secrets.SENTRY_DNS || 'https://stub@sentry.io/0' }}
+          supabase_project_url: ${{ secrets.SUPABASE_PROJECT_URL || 'https://stub.supabase.co' }}
+          supabase_project_anon_key: ${{ secrets.SUPABASE_PROJECT_ANON_KEY || 'ci-stub' }}
+
+      - name: Install Flutter packages
+        run: flutter pub get
+
+      - name: Generate code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Pod install (regenerate lockfile if constraints have shifted)
+        run: .github/scripts/pod_install_with_targeted_fallback.sh
+
+      # develop flavor = the .develop bundle id, matching the Android
+      # sideload variant, so it cannot collide with a store install.
+      - name: Build iOS (no codesign)
+        run: flutter build ios --no-codesign --release --flavor develop
+
+      - name: Pack unsigned .app into an ipa
+        run: |
+          mkdir -p build/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
+          cd build/ipa && zip -qry OpenNutriTrackerPlus-develop-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-develop-ipa-unsigned
+          path: build/ipa/OpenNutriTrackerPlus-develop-unsigned.ipa
