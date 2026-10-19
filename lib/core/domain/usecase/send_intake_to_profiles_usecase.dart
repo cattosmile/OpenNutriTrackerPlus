@@ -16,6 +16,7 @@ import 'package:opennutritracker/core/data/repository/user_repository.dart';
 import 'package:opennutritracker/core/domain/entity/intake_entity.dart';
 import 'package:opennutritracker/core/domain/entity/profile_entity.dart';
 import 'package:opennutritracker/core/domain/usecase/add_tracked_day_usecase.dart';
+import 'package:opennutritracker/core/domain/usecase/get_config_usecase.dart';
 import 'package:opennutritracker/core/domain/usecase/get_kcal_goal_usecase.dart';
 import 'package:opennutritracker/core/domain/usecase/get_macro_goal_usecase.dart';
 import 'package:opennutritracker/core/utils/hive_db_provider.dart';
@@ -90,10 +91,13 @@ class SendIntakeToProfilesUsecase {
 
     try {
       final intakeRepository = IntakeRepository(IntakeDataSource(scoped));
+      final configRepository = ConfigRepository(ConfigDataSource(scoped));
+      // Shares the app config box (see openScopedBox calls above), so the
+      // day-boundary offset this reads is the global one.
       final addTrackedDay = AddTrackedDayUsecase(
         TrackedDayRepository(TrackedDayDataSource(scoped)),
+        GetConfigUsecase(configRepository),
       );
-      final configRepository = ConfigRepository(ConfigDataSource(scoped));
       final getKcalGoal = GetKcalGoalUsecase(
         userRepository,
         configRepository,

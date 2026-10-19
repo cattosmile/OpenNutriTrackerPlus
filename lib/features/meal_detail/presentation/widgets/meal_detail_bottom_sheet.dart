@@ -4,6 +4,7 @@ import 'package:opennutritracker/core/styles/app_palette.dart';
 import 'package:opennutritracker/core/styles/dimens.dart';
 import 'package:opennutritracker/core/domain/entity/intake_entity.dart';
 import 'package:opennutritracker/core/domain/entity/intake_type_entity.dart';
+import 'package:opennutritracker/core/domain/usecase/get_config_usecase.dart';
 import 'package:opennutritracker/core/domain/usecase/get_intake_usecase.dart';
 import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/utils/serving_label_localizer.dart';
@@ -121,10 +122,7 @@ class _MealDetailBottomSheetState extends State<MealDetailBottomSheet> {
         // the row entirely when nothing applies (no orphan SizedBox).
         final quickOptions = productMissingRequiredInfo
             ? const <QuickServingOption>[]
-            : quickServingOptionsFor(
-                widget.product,
-                S.of(context).gramUnit,
-              );
+            : quickServingOptionsFor(widget.product, S.of(context).gramUnit);
         return Container(
           decoration: BoxDecoration(
             border: Border(
@@ -209,9 +207,7 @@ class _MealDetailBottomSheetState extends State<MealDetailBottomSheet> {
                       ),
                       if (quickOptions.isNotEmpty)
                         Padding(
-                          padding: const EdgeInsets.only(
-                            top: Dimens.spacing12,
-                          ),
+                          padding: const EdgeInsets.only(top: Dimens.spacing12),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: Wrap(
@@ -219,8 +215,7 @@ class _MealDetailBottomSheetState extends State<MealDetailBottomSheet> {
                               children: [
                                 for (final option in quickOptions)
                                   Semantics(
-                                    identifier:
-                                        'meal-detail-chip-${option.id}',
+                                    identifier: 'meal-detail-chip-${option.id}',
                                     child: ActionChip(
                                       label: Text(option.label),
                                       onPressed: () =>
@@ -357,20 +352,40 @@ class _MealDetailBottomSheetState extends State<MealDetailBottomSheet> {
     final getIntakeUsecase = locator<GetIntakeUsecase>();
     final List<IntakeEntity> todayIntakes;
 
+    // Same-day means the same *logical* day, so the duplicate check sees
+    // entries logged just after midnight too.
+    final config = await locator<GetConfigUsecase>().getConfig();
+    final offsetHours = config.dayStartOffsetHours;
+    final offsetMinutes = config.dayStartOffsetMinutes;
+
     switch (widget.intakeTypeEntity) {
       case IntakeTypeEntity.breakfast:
         todayIntakes = await getIntakeUsecase.getBreakfastIntakeByDay(
           widget.day,
+          dayStartOffsetHours: offsetHours,
+          dayStartOffsetMinutes: offsetMinutes,
         );
         break;
       case IntakeTypeEntity.lunch:
-        todayIntakes = await getIntakeUsecase.getLunchIntakeByDay(widget.day);
+        todayIntakes = await getIntakeUsecase.getLunchIntakeByDay(
+          widget.day,
+          dayStartOffsetHours: offsetHours,
+          dayStartOffsetMinutes: offsetMinutes,
+        );
         break;
       case IntakeTypeEntity.dinner:
-        todayIntakes = await getIntakeUsecase.getDinnerIntakeByDay(widget.day);
+        todayIntakes = await getIntakeUsecase.getDinnerIntakeByDay(
+          widget.day,
+          dayStartOffsetHours: offsetHours,
+          dayStartOffsetMinutes: offsetMinutes,
+        );
         break;
       case IntakeTypeEntity.snack:
-        todayIntakes = await getIntakeUsecase.getSnackIntakeByDay(widget.day);
+        todayIntakes = await getIntakeUsecase.getSnackIntakeByDay(
+          widget.day,
+          dayStartOffsetHours: offsetHours,
+          dayStartOffsetMinutes: offsetMinutes,
+        );
         break;
     }
 

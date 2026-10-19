@@ -268,10 +268,14 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     String intakeId,
     Map<String, dynamic> fields,
   ) async {
-    final dateTime = await _currentLogicalDay();
     // Get old intake values
     final oldIntakeObject = await _getIntakeUsecase.getIntakeById(intakeId);
     if (oldIntakeObject == null) return;
+    // Corrections target the tracked-day row the original write hit: the
+    // intake's own day, not today — a back-dated or just-after-midnight
+    // entry would otherwise adjust the wrong row's totals. Resolved to a
+    // day label once; AddTrackedDayUsecase passes labels through as-is.
+    final dateTime = await _dayKeyFor(oldIntakeObject.dateTime);
     final newIntakeObject = await _updateIntakeUsecase.updateIntake(
       intakeId,
       fields,
@@ -314,7 +318,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   }
 
   Future<void> deleteIntakeItem(IntakeEntity intakeEntity) async {
-    final dateTime = await _currentLogicalDay();
+    // The intake's own day, per updateIntakeItem above.
+    final dateTime = await _dayKeyFor(intakeEntity.dateTime);
     await _deleteIntakeUsecase.deleteIntake(intakeEntity);
     await _addTrackedDayUseCase.removeDayCaloriesTracked(
       dateTime,
@@ -331,7 +336,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   }
 
   Future<void> deleteUserActivityItem(UserActivityEntity activityEntity) async {
-    final dateTime = await _currentLogicalDay();
+    // The activity's own day, so goal corrections land on the row the
+    // original logging reduced.
+    final dateTime = await _dayKeyFor(activityEntity.date);
     await _deleteUserActivityUsecase.deleteUserActivity(activityEntity);
     _addTrackedDayUseCase.reduceDayCalorieGoal(
       dateTime,
@@ -360,7 +367,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     UserActivityEntity activityEntity,
     double newDuration,
   ) async {
-    final dateTime = await _currentLogicalDay();
+    final dateTime = await _dayKeyFor(activityEntity.date);
     final newActivity = await _updateUserActivityUsecase.updateUserActivity(
       activityEntity,
       newDuration,
@@ -427,10 +434,10 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   /// each call so the most recent setting wins without needing the
   /// bloc to cache it explicitly. The follow-up to #139 reads the
   /// total-minutes value so the minute component (0-59) is honoured.
-  Future<DateTime> _currentLogicalDay() async {
+  /// Label of the tracked-day row (and diary day) a moment belongs to —
+  /// the same resolution [AddTrackedDayUsecase] applies on write.
+  Future<DateTime> _dayKeyFor(DateTime moment) async {
     final config = await _getConfigUsecase.getConfig();
-    return DayBoundaryCalc.currentLogicalDayMinutes(
-      config.dayStartOffsetTotalMinutes,
-    );
+    return DayBoundaryCalc.dayKeyFor(moment, config.dayStartOffsetTotalMinutes);
   }
 }

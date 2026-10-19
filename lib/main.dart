@@ -6,9 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:logging/logging.dart';
 import 'package:opennutritracker/core/data/data_source/remote_search_cache_data_source.dart';
+import 'package:opennutritracker/core/data/data_source/tracked_day_data_source.dart';
 import 'package:opennutritracker/core/data/data_source/user_data_source.dart';
 import 'package:opennutritracker/core/data/repository/config_repository.dart';
+import 'package:opennutritracker/core/data/repository/intake_repository.dart';
 import 'package:opennutritracker/core/domain/entity/app_theme_entity.dart';
+import 'package:opennutritracker/core/domain/entity/intake_entity.dart';
 import 'package:opennutritracker/core/l10n/app_locales.dart';
 import 'package:opennutritracker/core/presentation/main_screen.dart';
 import 'package:opennutritracker/core/presentation/splash_screen.dart';
@@ -23,6 +26,7 @@ import 'package:opennutritracker/core/utils/hive_storage_integrity_exception.dar
 import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/utils/logger_config.dart';
 import 'package:opennutritracker/core/utils/sentry_config.dart';
+import 'package:opennutritracker/core/utils/tracked_day_boundary_repair.dart';
 import 'package:opennutritracker/core/utils/notification_service.dart';
 import 'package:opennutritracker/core/utils/navigation_options.dart';
 import 'package:opennutritracker/core/utils/energy_unit_provider.dart';
@@ -91,6 +95,31 @@ Future<void> _bootstrapApp() async {
   final configRepo = locator<ConfigRepository>();
 
   final config = await configRepo.getConfig();
+
+  // Re-aggregate the per-day tracked totals under the configured day
+  // boundary. Rows written before the boundary-aware write fix (or under
+  // a since-changed boundary) carry wall-clock-keyed totals that made
+  // diary and trends disagree with home. Idempotent and cheap, so it
+  // runs on every start; a failure must never block booting.
+  try {
+    final intakeRepository = locator<IntakeRepository>();
+    final trackedDayDataSource = locator<TrackedDayDataSource>();
+    await TrackedDayBoundaryRepair.repair(
+      intakes: (await intakeRepository.getAllIntakesDBO())
+          .map(IntakeEntity.fromIntakeDBO)
+          .toList(),
+      rows: await trackedDayDataSource.getAllTrackedDays(),
+      offsetTotalMinutes: config.dayStartOffsetTotalMinutes,
+      saveRow: trackedDayDataSource.saveTrackedDay,
+    );
+  } catch (e, st) {
+    log.warning(
+      'Tracked-day boundary repair failed; leaving rows as-is',
+      e,
+      st,
+    );
+  }
+
   // Android's own per-app language picker and ours are two doors into the
   // same setting, so ask the system what it holds before trusting what we
   // saved. See [reconcileAppLocale] for which side wins and why.
@@ -312,7 +341,8 @@ class _OpenNutriTrackerAppState extends State<OpenNutriTrackerApp>
         NavigationOptions.settingsRoute: (context) => const SettingsScreen(),
         NavigationOptions.accentColourRoute: (context) =>
             const AccentColourScreen(),
-        NavigationOptions.healthSyncRoute: (context) => const HealthSyncScreen(),
+        NavigationOptions.healthSyncRoute: (context) =>
+            const HealthSyncScreen(),
         NavigationOptions.addMealRoute: (context) => const AddMealScreen(),
         NavigationOptions.bulkAddRoute: (context) => const BulkAddScreen(),
         NavigationOptions.scannerRoute: (context) => const ScannerScreen(),

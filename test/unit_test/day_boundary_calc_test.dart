@@ -66,10 +66,7 @@ void main() {
       }
       // At offset 15 or higher, 14:00 has not yet reached today's
       // boundary, so it still belongs to yesterday.
-      expect(
-        DayBoundaryCalc.logicalDayOf(moment, 15),
-        DateTime(2024, 1, 14),
-      );
+      expect(DayBoundaryCalc.logicalDayOf(moment, 15), DateTime(2024, 1, 14));
     });
 
     test('offset 23: only the 23:00-23:59 window stays in today', () {
@@ -89,10 +86,7 @@ void main() {
       // Fresh installs and existing users have no stored offset; null
       // should keep them on wall-clock midnight.
       final moment = DateTime(2024, 1, 15, 2, 0);
-      expect(
-        DayBoundaryCalc.logicalDayOf(moment, null),
-        DateTime(2024, 1, 15),
-      );
+      expect(DayBoundaryCalc.logicalDayOf(moment, null), DateTime(2024, 1, 15));
     });
 
     test('out-of-range offsets clamp to 0', () {
@@ -100,18 +94,9 @@ void main() {
       // the diary into an impossible state. Anything outside 0-23 is
       // treated as the default.
       final moment = DateTime(2024, 1, 15, 2, 0);
-      expect(
-        DayBoundaryCalc.logicalDayOf(moment, -1),
-        DateTime(2024, 1, 15),
-      );
-      expect(
-        DayBoundaryCalc.logicalDayOf(moment, 24),
-        DateTime(2024, 1, 15),
-      );
-      expect(
-        DayBoundaryCalc.logicalDayOf(moment, 999),
-        DateTime(2024, 1, 15),
-      );
+      expect(DayBoundaryCalc.logicalDayOf(moment, -1), DateTime(2024, 1, 15));
+      expect(DayBoundaryCalc.logicalDayOf(moment, 24), DateTime(2024, 1, 15));
+      expect(DayBoundaryCalc.logicalDayOf(moment, 999), DateTime(2024, 1, 15));
     });
   });
 
@@ -298,22 +283,23 @@ void main() {
       );
     });
 
-    test('a local-midnight label works too (diary before any day is tapped)',
-        () {
-      // _selectedDate starts life as DateTime.now(), so the label handed
-      // to the query is not always UTC.
-      expect(
-        DayBoundaryCalc.isMomentInLogicalDayMinutes(
-          DateTime(2026, 7, 20),
-          DateTime(2026, 7, 20, 12, 0),
-          sixAm,
-        ),
-        isTrue,
-      );
-    });
+    test(
+      'a local-midnight label works too (diary before any day is tapped)',
+      () {
+        // _selectedDate starts life as DateTime.now(), so the label handed
+        // to the query is not always UTC.
+        expect(
+          DayBoundaryCalc.isMomentInLogicalDayMinutes(
+            DateTime(2026, 7, 20),
+            DateTime(2026, 7, 20, 12, 0),
+            sixAm,
+          ),
+          isTrue,
+        );
+      },
+    );
 
-    test('an imported entry dated the 20th is a label, in either spelling',
-        () {
+    test('an imported entry dated the 20th is a label, in either spelling', () {
       // JsonMealImporter dates an entry `DateTime(y, m, d)` — *local*
       // midnight — from its optional `date` field. Keying "is this a
       // label?" off the UTC flag alone filed every date-only import a
@@ -364,6 +350,58 @@ void main() {
         ),
         isFalse,
       );
+    });
+  });
+
+  group('DayBoundaryCalc.dayKeyFor (tracked-day write side)', () {
+    const fiveAm = 5 * 60;
+
+    test('a moment before the boundary rolls back a day', () {
+      expect(
+        DayBoundaryCalc.dayKeyFor(DateTime(2026, 7, 21, 0, 30), fiveAm),
+        DateTime(2026, 7, 20),
+      );
+    });
+
+    test('a moment after the boundary stays on its day', () {
+      expect(
+        DayBoundaryCalc.dayKeyFor(DateTime(2026, 7, 21, 5, 0), fiveAm),
+        DateTime(2026, 7, 21),
+      );
+      expect(
+        DayBoundaryCalc.dayKeyFor(DateTime(2026, 7, 21, 14, 23, 9, 12), fiveAm),
+        DateTime(2026, 7, 21),
+      );
+    });
+
+    test('a bare-midnight label stays on its own day', () {
+      // Back-dated diary entries and imports are picked dates, not clock
+      // readings — see _isDayLabel. Both spellings behave the same.
+      expect(
+        DayBoundaryCalc.dayKeyFor(DateTime(2026, 7, 21), fiveAm),
+        DateTime(2026, 7, 21),
+      );
+      expect(
+        DayBoundaryCalc.dayKeyFor(DateTime.utc(2026, 7, 21), fiveAm),
+        DateTime(2026, 7, 21),
+      );
+    });
+
+    test('zero offset reduces to the wall-clock date', () {
+      expect(
+        DayBoundaryCalc.dayKeyFor(DateTime(2026, 7, 21, 0, 30), 0),
+        DateTime(2026, 7, 21),
+      );
+    });
+
+    test('is idempotent: a key fed back in stays put', () {
+      // Callers resolve once and pass the label to the use case, which
+      // resolves again — the label rule keeps that a no-op.
+      final key = DayBoundaryCalc.dayKeyFor(
+        DateTime(2026, 7, 21, 0, 30),
+        fiveAm,
+      );
+      expect(DayBoundaryCalc.dayKeyFor(key, fiveAm), key);
     });
   });
 

@@ -65,7 +65,10 @@ class DayBoundaryCalc {
   ///
   /// Out-of-range values (negative, or ≥ 24 h) are treated as 0 — the
   /// same defensive behaviour as the hours-only overload.
-  static DateTime logicalDayOfMinutes(DateTime moment, int? offsetTotalMinutes) {
+  static DateTime logicalDayOfMinutes(
+    DateTime moment,
+    int? offsetTotalMinutes,
+  ) {
     return _logicalDayOfTotalMinutes(
       moment,
       _sanitiseTotalMinutes(offsetTotalMinutes),
@@ -115,6 +118,23 @@ class DayBoundaryCalc {
     return momentDay.year == dayLabel.year &&
         momentDay.month == dayLabel.month &&
         momentDay.day == dayLabel.day;
+  }
+
+  /// The day key a tracked-day row (or any per-day aggregate) must use for
+  /// an entry stamped [moment], given the configured [offsetTotalMinutes].
+  ///
+  /// This is the write-side counterpart of [isMomentInLogicalDayMinutes]:
+  /// that helper decides whether a moment falls in a labelled day, this one
+  /// produces the label. A real clock reading (an intake logged at 00:30
+  /// under a 05:00 boundary) rolls back to the previous day; a bare
+  /// midnight — the app's spelling of a picked calendar date, see
+  /// [_isDayLabel] — stays on its own day so back-dated diary entries and
+  /// imports never shift.
+  static DateTime dayKeyFor(DateTime moment, int? offsetTotalMinutes) {
+    if (_isDayLabel(moment)) {
+      return DateTime(moment.year, moment.month, moment.day);
+    }
+    return logicalDayOfMinutes(moment, offsetTotalMinutes);
   }
 
   /// True when [a] and [b] resolve to the same logical day under
