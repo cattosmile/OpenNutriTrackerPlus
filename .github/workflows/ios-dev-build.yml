@@ -1,6 +1,8 @@
 name: iOS dev build
 
-# Unsigned develop-flavor IPA as a downloadable artifact, for sideloading
+# Unsigned develop-flavor IPA as a downloadable artifact — and, unless
+# dispatch disables it, as an asset of the rolling "ios-dev" prerelease,
+# whose stable URL needs no GitHub login — for sideloading
 # with Sideloadly or AltStore — those re-sign with a personal Apple ID,
 # so no paid developer account and no repo secrets are required.
 #
@@ -13,9 +15,14 @@ name: iOS dev build
 # app falls back to Open Food Facts + custom meals for food search.
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the IPA to the ios-dev rolling release (direct download link)
+        type: boolean
+        default: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -81,3 +88,22 @@ jobs:
         with:
           name: ios-develop-ipa-unsigned
           path: build/ipa/OpenNutriTrackerPlus-develop-unsigned.ipa
+
+      # Actions artifacts need a GitHub login to download; a release asset
+      # is a plain URL. One rolling prerelease ("ios-dev") whose asset is
+      # clobbered on every dispatch keeps the link stable, so it can be
+      # shared once and always serve the latest dev IPA:
+      #   .../releases/download/ios-dev/OpenNutriTrackerPlus-develop-unsigned.ipa
+      - name: Publish IPA to the ios-dev rolling release
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-dev >/dev/null 2>&1 || \
+            gh release create ios-dev \
+              --title "iOS dev builds" \
+              --prerelease \
+              --notes "Unsigned develop-flavor IPA from the latest manual dispatch. Sideload with Sideloadly or AltStore, which re-sign it with a personal Apple ID."
+          gh release upload ios-dev \
+            build/ipa/OpenNutriTrackerPlus-develop-unsigned.ipa \
+            --clobber
