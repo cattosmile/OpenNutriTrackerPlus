@@ -47,7 +47,13 @@ const ownServerTimeout = Duration(seconds: 120);
 
 /// How long Z.ai is given to answer — reasoning time comes on top of the
 /// answer, so the hosted 20s is tuned for a speed these models do not have.
-const zaiTimeout = Duration(seconds: 60);
+///
+/// Measured 2026-10-19 against the coding endpoint at reasoning effort
+/// `high`: the same two-photo label-scan request answered in 19 s, 25 s,
+/// 25 s and 45 s across four runs, purely from queue load. A 60 s budget
+/// failed on-device at evening peak — with the mobile upload still to add —
+/// so the ceiling has to clear an outlier run with margin, not the average.
+const zaiTimeout = Duration(seconds: 150);
 
 /// How long a setup-time probe waits for an endpoint the user just typed.
 ///
@@ -122,6 +128,12 @@ MealItemsApi mealItemsApiFor(
       reasoningEffort:
           (selection.reasoningEffort ?? AiReasoningEffort.high).name,
       failureFor: OpenAiCompatibleMealItemsApi.zaiFailureFor,
+      // A timeout here is the same fact #774 measured on a user's own
+      // server: the model was still working and the network was fine.
+      // Left as the default `transient`, it reads "check your connection" —
+      // which sent a user whose scan had merely out-thought the budget to
+      // debug a 5G link that had been carrying the request the whole time.
+      timeoutFailure: MealInterpreterFailure.timeout,
       timeout: timeout ?? zaiTimeout,
     ),
     // The user's own address, no broker, and **no forcing by name**: #733

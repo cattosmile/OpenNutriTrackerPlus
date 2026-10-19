@@ -1708,7 +1708,7 @@
   "aiScanUnreadablePhotoLabel": "Couldn't read that image. Try another photo.",
   "aiScanUnsupportedLabel": "That model can't read photos. Choose a different one in Settings.",
   "aiScanInsecureServerLabel": "AI didn't run: that address is public and unencrypted.",
-  "aiScanTimedOutLabel": "Your server didn't answer in time. A model loading for the first time can take a minute or two — try again.",
+  "aiScanTimedOutLabel": "The server didn't answer in time. A model that is still thinking, or loading for the first time, can take a minute or two — try again.",
   "aiScanFailedLabel": "Couldn't read the label. Check your connection and try again.",
   "aiScanResultTitle": "Check the values",
   "aiScanSourceLabelLabel": "Label",

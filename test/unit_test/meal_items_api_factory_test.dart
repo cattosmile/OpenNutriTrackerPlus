@@ -398,9 +398,13 @@ void main() {
       expect(openai.timeout, hosted);
     });
 
-    test('Z.ai sits between: reasoning time on top of the answer', () {
-      // The relations, not the literals: longer than a model that replies
-      // immediately needs, shorter than a cold load on borrowed hardware.
+    test('Z.ai outlives a model that replies immediately', () {
+      // The relations, not the literals: reasoning time comes on top of the
+      // answer, and the same two-photo label scan measured 19 s to 45 s
+      // across four runs at evening peak (2026-10-19) — the ceiling has to
+      // clear the outlier, not the average. No upper relation to
+      // ownServerTimeout any more: a queue-loaded hosted reasoning model is
+      // in the same latency class as a cold load on borrowed hardware.
       final zai =
           mealItemsApiFor(
                 CapturingClient(),
@@ -412,15 +416,25 @@ void main() {
         zai.timeout,
         greaterThan(OpenAiCompatibleMealItemsApi.defaultTimeout),
       );
-      expect(zai.timeout, lessThan(ownServerTimeout));
     });
 
-    test('only the user\'s own server calls a timeout a timeout', () {
+    test('the slow destinations call a timeout a timeout', () {
       // The classification travels with the budget, and only together do
       // they mean anything: the longer wait stops a cold load failing at
       // all, and the label stops what is left being described as a network
-      // problem. On the hosted three both stay as they were.
+      // problem. Z.ai joined this pair on 2026-10-19: a label scan that
+      // out-thought a 60 s budget was shown as a connection problem on a
+      // phone whose network had carried the request the whole time. On the
+      // hosted three both stay as they were.
       expect(ownServerApi().timeoutFailure, MealInterpreterFailure.timeout);
+
+      final zai =
+          mealItemsApiFor(
+                CapturingClient(),
+                const AiSelection(provider: AiProvider.zai, apiKey: 'sk-zai'),
+              )
+              as OpenAiCompatibleMealItemsApi;
+      expect(zai.timeoutFailure, MealInterpreterFailure.timeout);
 
       final openrouter =
           mealItemsApiFor(

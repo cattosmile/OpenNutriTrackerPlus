@@ -1377,7 +1377,7 @@
   "aiScanUnreadablePhotoLabel": "Dieses Bild konnte nicht gelesen werden. Versuche ein anderes Foto.",
   "aiScanUnsupportedLabel": "Dieses Modell kann keine Fotos lesen. Wähle in den Einstellungen ein anderes.",
   "aiScanInsecureServerLabel": "KI lief nicht: diese Adresse ist öffentlich und unverschlüsselt.",
-  "aiScanTimedOutLabel": "Dein Server hat nicht rechtzeitig geantwortet. Ein Modell, das zum ersten Mal lädt, kann ein bis zwei Minuten brauchen — versuche es erneut.",
+  "aiScanTimedOutLabel": "Der Server hat nicht rechtzeitig geantwortet. Ein Modell, das noch denkt oder zum ersten Mal lädt, kann ein bis zwei Minuten brauchen — versuche es erneut.",
   "aiScanFailedLabel": "Etikett konnte nicht gelesen werden. Prüfe deine Verbindung und versuche es erneut.",
   "aiScanResultTitle": "Prüfe die Werte",
   "aiScanSourceLabelLabel": "Etikett",
