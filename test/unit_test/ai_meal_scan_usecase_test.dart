@@ -62,6 +62,11 @@ void main() {
         },
         'matchedFoodName': 'Thunfisch in Wasser',
       },
+      // The canned merge covers only four keys, so the pipeline asks for
+      // the rest — the reply fills one of them.
+      {
+        'nutrients': {'vitaminB9100': 20},
+      },
     ]);
     final research = _FakeResearch()
       ..barcodeRecords = [
@@ -86,24 +91,30 @@ void main() {
     final result = (outcome as AiMealScanDone).result;
     expect(result.name, 'Thunfisch');
     expect(result.packageSizeGrams, 185);
+    // The typed portion rides through as the user's own serving.
+    expect(result.userPortionGrams, 185);
     // The label's energy survives the merge's different opinion.
     expect(result.nutrients['energyKcal100'], 116);
     expect(result.sources['energyKcal100'], AiLabelValueSource.label);
     expect(result.sources['selenium100'], AiLabelValueSource.database);
     expect(result.sources['iodine100'], AiLabelValueSource.estimated);
+    // The gap-filled key counts as the model's own estimate.
+    expect(result.sources['vitaminB9100'], AiLabelValueSource.estimated);
     expect(result.matchedFoodName, 'Thunfisch in Wasser');
 
     // Call order and photo routing: the OCR carries both photos, the merge
-    // is text-only.
+    // is text-only, and the gap-fill only happens because the canned
+    // merge was partial.
     expect(api.calls.map((c) => c.toolName), [
       scanLabelToolName,
       mergeNutrientsToolName,
+      scanGapFillToolName,
     ]);
     expect(api.calls.first.photos, 2);
     expect(api.calls.last.photos, 0);
     // The merge prompt carries the hints and the research record.
-    expect(api.calls.last.userPrompt, contains('"supermarket":"Rewe"'));
-    expect(api.calls.last.userPrompt, contains('Thunfisch Dose'));
+    expect(api.calls[1].userPrompt, contains('"supermarket":"Rewe"'));
+    expect(api.calls[1].userPrompt, contains('Thunfisch Dose'));
 
     expect(research.barcodes, ['4000417025006']);
     expect(research.queries, ['Kaak Thunfisch']);
@@ -119,6 +130,7 @@ void main() {
     () async {
       final api = _FakeToolApi([
         {'productName': 'Vollkornbrot', 'nutrients': {}},
+        {'nutrients': {}},
         {'nutrients': {}},
       ]);
       final research = _FakeResearch();
@@ -137,6 +149,7 @@ void main() {
     final api = _FakeToolApi([
       {'productName': 'Thunfisch', 'brand': 'Kaak', 'nutrients': {}},
       {'nutrients': {}},
+      {'nutrients': {}},
     ]);
     final research = _FakeResearch();
 
@@ -149,7 +162,7 @@ void main() {
     expect(research.queries, ['Kaak Thunfischfilets in eigenem Saft']);
     // The typed name rides along as a merge hint too.
     expect(
-      api.calls.last.userPrompt,
+      api.calls[1].userPrompt,
       contains('Thunfischfilets in eigenem Saft'),
     );
   });
@@ -160,6 +173,7 @@ void main() {
       {
         'nutrients': {'iron100': 3},
       },
+      {'nutrients': {}},
     ]);
     final research = _ThrowingResearch();
 
@@ -175,10 +189,129 @@ void main() {
       AiLabelValueSource.estimated,
     );
   });
+
+  test('records reach the merge trimmed to the label\'s gaps', () async {
+    final api = _FakeToolApi([
+      {
+        'productName': 'Thunfisch',
+        'nutrients': {'energyKcal100': 116, 'proteins100': 26},
+      },
+      {'nutrients': {}},
+      {'nutrients': {}},
+    ]);
+    final research = _FakeResearch()
+      ..nameRecords = [
+        const AiFoodRecord('Open Food Facts', 'Thunfisch Dose', {
+          'energyKcal100': 999,
+          'selenium100': 55,
+        }),
+        // Every nutrient already covered: a record with nothing to fill.
+        const AiFoodRecord('Open Food Facts', 'Vollkopie', {
+          'energyKcal100': 111,
+          'proteins100': 22,
+        }),
+      ];
+
+    final outcome = await AiMealScanUseCase(
+      await zaiStorage(),
+      (_) => api,
+      research,
+    ).run(backPhoto: photo);
+
+    expect(outcome, isA<AiMealScanDone>());
+    final prompt = api.calls[1].userPrompt;
+    // The gap-filling record is there with only its gap nutrient.
+    expect(prompt, contains('Thunfisch Dose'));
+    expect(prompt, contains('"selenium100":55'));
+    expect(prompt, isNot(contains('"energyKcal100":999')));
+    // The all-covered record dropped out entirely.
+    expect(prompt, isNot(contains('Vollkopie')));
+  });
+
+  test('a typed portion parses with a comma decimal separator', () async {
+    final api = _FakeToolApi([
+      {'productName': 'Butter', 'nutrients': {}},
+      {'nutrients': {}},
+      {'nutrients': {}},
+    ]);
+
+    final outcome = await AiMealScanUseCase(
+      await zaiStorage(),
+      (_) => api,
+      _FakeResearch(),
+    ).run(backPhoto: photo, portionGrams: '92,5');
+
+    expect((outcome as AiMealScanDone).result.userPortionGrams, 92.5);
+    expect(api.calls[1].userPrompt, contains('"portionGrams":92.5'));
+  });
+
+  test('a complete merge needs no third call', () async {
+    final api = _FakeToolApi([
+      {'productName': 'Thunfisch', 'nutrients': {}},
+      {
+        'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 1},
+      },
+    ]);
+
+    final outcome = await AiMealScanUseCase(
+      await zaiStorage(),
+      (_) => api,
+      _FakeResearch(),
+    ).run(backPhoto: photo);
+
+    expect(outcome, isA<AiMealScanDone>());
+    expect(api.calls.map((c) => c.toolName), [
+      scanLabelToolName,
+      mergeNutrientsToolName,
+    ]);
+  });
+
+  test('the gap-fill asks for exactly what nobody covered', () async {
+    final api = _FakeToolApi([
+      {'productName': 'Butter', 'nutrients': {}},
+      {
+        // Everything except the two the live model dropped on the user.
+        'nutrients': {
+          for (final key in aiScanNutrientUnits.keys)
+            if (key != 'vitaminB9100' && key != 'choline100') key: 1,
+        },
+      },
+      {
+        'nutrients': {'vitaminB9100': 20, 'choline100': 10},
+      },
+    ]);
+
+    final outcome = await AiMealScanUseCase(
+      await zaiStorage(),
+      (_) => api,
+      _FakeResearch(),
+    ).run(backPhoto: photo);
+
+    expect(outcome, isA<AiMealScanDone>());
+    final result = (outcome as AiMealScanDone).result;
+    expect(result.nutrients['vitaminB9100'], 20);
+    expect(result.sources['vitaminB9100'], AiLabelValueSource.estimated);
+    expect(result.nutrients['choline100'], 10);
+    final gapFill = api.calls.last;
+    expect(gapFill.toolName, scanGapFillToolName);
+    expect(
+      (gapFill.toolSchema['properties']! as Map<String, dynamic>)['nutrients']!
+          as Map<String, dynamic>,
+      containsPair('required', ['vitaminB9100', 'choline100']),
+    );
+  });
 }
 
 class _FakeToolApi implements StructuredToolApi {
-  final calls = <({String toolName, int photos, String userPrompt})>[];
+  final calls =
+      <
+        ({
+          String toolName,
+          int photos,
+          String userPrompt,
+          Map<String, dynamic> toolSchema,
+        })
+      >[];
   final List<Map<String, dynamic>> _replies;
 
   _FakeToolApi(this._replies);
@@ -196,6 +329,7 @@ class _FakeToolApi implements StructuredToolApi {
       toolName: toolName,
       photos: photos.length,
       userPrompt: userPrompt,
+      toolSchema: toolSchema,
     ));
     return _replies.removeAt(0);
   }

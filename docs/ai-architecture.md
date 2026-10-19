@@ -284,14 +284,25 @@ Three steps, in [`ai_meal_scan_usecase.dart`](../lib/features/edit_meal/domain/u
    model would have to re-read.
 3. **Complete.** A text-only second call receives the label values, the database records and the
    user's hints, and fills every nutrient by precedence: label values verbatim, then a close
-   database record, then estimation from food-composition knowledge.
+   database record, then estimation from food-composition knowledge. Two details keep that call
+   both fast and complete: each record is trimmed to the nutrients the label did **not** print
+   (a record value for a label nutrient can never win, so it is dead weight the model would
+   read past), and the merge schema names every nutrient `required` with an "always present"
+   policy per key — the transcription step's "omit when not readable" wording is withheld
+   there, because a model that followed it returned 42 of 44 nutrients and the form showed the
+   two omissions as empty fields. Omission is stochastic, not obeyed: when the merge still drops
+   a key a record measured, `AiMealScanResult.build` applies the record-preference rule itself
+   in Dart — that rule never needed a model — and a small follow-up call re-asks for whatever
+   nobody covered, so an omission costs seconds, not empty fields.
 
 The provenance of each final value is **computed in Dart, not asked of the model**:
 `AiMealScanResult.build` tags every value Label / Database / Estimated from what each input
 actually contained, and a label value survives verbatim even when the merge call returned a
 different number for it — "the model preferred its own idea over the photograph" is the failure
 that ordering exists to prevent. The review card shows the tag per value, so the numbers worth
-double-checking are the ones that say *Estimated*.
+double-checking are the ones that say *Estimated*. The portion the user typed on the scan
+screen never touches a model either: it is carried through the result and prefills the form's
+serving field, outranking whatever serving the label happened to print.
 
 The seam these calls go through is [`StructuredToolApi`](../lib/features/add_meal/domain/structured_tool_api.dart)
 — implemented by the same three wire-format clients as `MealItemsApi`, so one Settings

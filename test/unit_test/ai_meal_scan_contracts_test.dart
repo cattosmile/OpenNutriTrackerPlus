@@ -45,9 +45,7 @@ void main() {
 
     test('a barcode survives only as shape-checked digits', () {
       expect(
-        AiLabelData.fromToolArguments({
-          'barcode': '4000417025006',
-        }).barcode,
+        AiLabelData.fromToolArguments({'barcode': '4000417025006'}).barcode,
         '4000417025006',
       );
       // Spaces and separators are stripped; the digits underneath count.
@@ -124,6 +122,70 @@ void main() {
       expect(result.sources['iodine100'], AiLabelValueSource.estimated);
       expect(result.matchedFoodName, 'Thunfisch in Wasser');
       expect(result.name, 'Thunfisch');
+    });
+
+    test('a key the merge omitted falls back to the record, in Dart', () {
+      // `merged` above carries no chromium; a record measured it. The
+      // merge's own precedence says the record beats estimation, so the
+      // value still lands — without a second model call.
+      final result = AiMealScanResult.build(
+        label: label,
+        databaseNutrients: const {'chromium100': 2},
+        merged: merged,
+      );
+      expect(result.nutrients['chromium100'], 2);
+      expect(result.sources['chromium100'], AiLabelValueSource.database);
+    });
+
+    test('the user\'s typed portion is carried through untouched', () {
+      final result = AiMealScanResult.build(
+        label: label,
+        databaseNutrients: const {},
+        merged: merged,
+        userPortionGrams: 92.5,
+      );
+      expect(result.userPortionGrams, 92.5);
+    });
+  });
+
+  group('schema absent-policy', () {
+    // The live failure behind this: glm-5.3-flash followed the merge
+    // schema's per-key "omit when not readable on the label" wording and
+    // returned 42 of 44 nutrients, so folate and choline reached the form
+    // as empty fields the user had watched being estimated.
+    Map<String, dynamic> nutrientPropertiesOf(Map<String, Object> schema) =>
+        ((schema['properties']! as Map<String, Object>)['nutrients']!
+                as Map<String, dynamic>)['properties']!
+            as Map<String, dynamic>;
+
+    test('the merge schema demands every nutrient key back', () {
+      final nutrients =
+          (mergeNutrientsToolSchema['properties']!
+                  as Map<String, Object>)['nutrients']!
+              as Map<String, dynamic>;
+      expect(
+        nutrients['required'],
+        unorderedEquals(aiScanNutrientUnits.keys.toList()),
+      );
+    });
+
+    test('the merge schema never tells the model to omit a key', () {
+      for (final prop in nutrientPropertiesOf(
+        mergeNutrientsToolSchema,
+      ).values) {
+        expect(
+          (prop as Map)['description'],
+          isNot(contains('Omit when not readable')),
+        );
+        expect(prop['description'], contains('Always present'));
+      }
+    });
+
+    test('the OCR schema still permits omission — it is transcription', () {
+      expect(
+        nutrientPropertiesOf(scanLabelToolSchema)['iron100']['description'],
+        contains('Omit when not readable on the label'),
+      );
     });
   });
 }

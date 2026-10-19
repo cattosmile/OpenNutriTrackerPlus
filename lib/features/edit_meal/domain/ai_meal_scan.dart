@@ -67,15 +67,29 @@ const scanLabelToolName = 'read_food_label';
 const scanLabelToolDescription =
     'Transcribe the packaged food label shown in the photographs.';
 
-Map<String, Object> get _nutrientProperties => <String, Object>{
-  for (final entry in aiScanNutrientUnits.entries)
-    entry.key: {
-      'type': 'number',
-      'description':
-          'Per 100 g (or 100 ml), expressed in ${entry.value}. Omit when '
-          'not readable on the label.',
-    },
-};
+/// The per-nutrient schema entries, with the step's own policy on when a
+/// key may be absent. The two steps disagree on purpose, and one shared
+/// wording shipped a bug: the transcription rule ("omit when not readable
+/// on the label") is wrong for the merge step, where every key must come
+/// back — a model that followed it there returned 42 of 44 nutrients, and
+/// the review card and the form silently showed the two omissions as
+/// empty fields the user had watched being estimated.
+Map<String, Object> _nutrientProperties(String absentPolicy) =>
+    <String, Object>{
+      for (final entry in aiScanNutrientUnits.entries)
+        entry.key: {
+          'type': 'number',
+          'description':
+              'Per 100 g (or 100 ml), expressed in ${entry.value}. '
+              '$absentPolicy',
+        },
+    };
+
+const _transcribeAbsentPolicy = 'Omit when not readable on the label.';
+
+const _completeAbsentPolicy =
+    'Always present: the label value, else a close record\'s, else your '
+    'estimate.';
 
 /// The schema of the OCR step. Like [mealItemsToolSchema] it is a hint to
 /// the model while enforcement stays in Dart — [AiLabelData.fromToolArguments]
@@ -113,7 +127,10 @@ Map<String, Object> get scanLabelToolSchema => <String, Object>{
           'One stated portion/serving in g (ml for drinks). Omit when not '
           'stated.',
     },
-    'nutrients': {'type': 'object', 'properties': _nutrientProperties},
+    'nutrients': {
+      'type': 'object',
+      'properties': _nutrientProperties(_transcribeAbsentPolicy),
+    },
   },
   'required': ['nutrients'],
 };
@@ -150,7 +167,11 @@ Map<String, Object> get mergeNutrientsToolSchema => <String, Object>{
   'properties': {
     'nutrients': {
       'type': 'object',
-      'properties': _nutrientProperties,
+      'properties': _nutrientProperties(_completeAbsentPolicy),
+      // Every key named required: the merge exists to fill gaps, so an
+      // omitted key is a failed answer, not a "not stated" — the same
+      // words the OCR schema uses to permit omission are withheld here.
+      'required': [...aiScanNutrientUnits.keys],
       'description':
           'Every nutrient, filled from the label first, then the database '
           'records, then estimation.',
@@ -169,7 +190,9 @@ const mergeNutrientsSystemPrompt = '''
 You complete the nutrition profile of one packaged food for a nutrition
 tracker. You receive the label values transcribed from the packaging (per
 100 g/ml), optional hints from the user, and database records for the same
-or similar products (per 100 g). Return every nutrient in the schema.
+or similar products (per 100 g). Return every nutrient in the schema —
+omitting one is a failed answer, not a cautious one: when neither the label
+nor any record has it, estimate it.
 
 Precedence:
 1. Label values were measured by the manufacturer. Copy them unchanged and
@@ -187,7 +210,42 @@ Precedence:
   stated label energy as printed even when it deviates — fibre, polyols
   and legal rounding make real labels deviate.
 - The supermarket hint disambiguates store brands; the portion hint is the
-  user's own serving, not the package.''';
+  user's own serving, not the package.
+- The precedence above is mechanical: copy, pick, estimate. Decide each
+  nutrient once and move on — deliberating twice only costs the user's
+  time.''';
+
+const scanGapFillToolName = 'estimate_missing_nutrients';
+
+const scanGapFillToolDescription =
+    'Estimate the few per-100 g nutrients still missing for one food.';
+
+/// The schema of the gap-fill follow-up: exactly the keys the merge step
+/// omitted despite its `required` list — measured against the live model,
+/// that omission is stochastic (three of four runs complete, one short by
+/// one to three keys), so the pipeline asks again for just the stragglers
+/// rather than treating a 43-of-44 answer as final.
+Map<String, Object> scanGapFillToolSchema(Iterable<String> keys) =>
+    <String, Object>{
+      'type': 'object',
+      'properties': {
+        'nutrients': {
+          'type': 'object',
+          'properties': _nutrientProperties(_completeAbsentPolicy),
+          'required': [...keys],
+        },
+      },
+      'required': ['nutrients'],
+    };
+
+const scanGapFillSystemPrompt = '''
+You estimate the per-100 g nutrient content of one packaged food for a
+nutrition tracker. The label has been read and the profile is nearly
+complete; the schema lists exactly the nutrients still missing. Estimate
+each from food-composition knowledge of this food. Zero is legitimate only
+when the food credibly contains none; otherwise give a plausible small
+amount. All values per 100 g/ml, in the unit each schema entry names.
+Decide each nutrient once — no deliberation, this call should be quick.''';
 
 /// A number a model handed back, or null when it is not one worth keeping.
 ///
@@ -293,6 +351,12 @@ class AiMealScanResult {
   final bool isDrink;
   final double? packageSizeGrams;
   final double? servingSizeGrams;
+
+  /// The portion the user typed on the scan screen, if any. It is not a
+  /// nutrient and no model produced it — it is carried through untouched so
+  /// the form can honour it: the user's own serving outranks whatever
+  /// serving the label happened to print.
+  final double? userPortionGrams;
   final Map<String, double> nutrients;
   final Map<String, AiLabelValueSource> sources;
   final String? matchedFoodName;
@@ -304,6 +368,7 @@ class AiMealScanResult {
     this.isDrink = false,
     this.packageSizeGrams,
     this.servingSizeGrams,
+    this.userPortionGrams,
     this.nutrients = const {},
     this.sources = const {},
     this.matchedFoodName,
@@ -319,6 +384,7 @@ class AiMealScanResult {
     required AiLabelData label,
     required Map<String, double> databaseNutrients,
     required AiMergedNutrients merged,
+    double? userPortionGrams,
   }) {
     final nutrients = <String, double>{};
     final sources = <String, AiLabelValueSource>{};
@@ -333,6 +399,14 @@ class AiMealScanResult {
         source = databaseNutrients.containsKey(key)
             ? AiLabelValueSource.database
             : AiLabelValueSource.estimated;
+      } else if (databaseNutrients[key] case final fromRecords?) {
+        // The merge omitted a key a record measured. Its own precedence
+        // says a record beats estimation, and applying that rule needs no
+        // model — so Dart applies it. Without this, an omission the model
+        // makes despite the schema's `required` list reaches the form as
+        // an empty field next to numbers a record actually measured.
+        value = fromRecords;
+        source = AiLabelValueSource.database;
       } else {
         continue;
       }
@@ -346,6 +420,7 @@ class AiMealScanResult {
       isDrink: label.isDrink,
       packageSizeGrams: label.packageSizeGrams,
       servingSizeGrams: label.servingSizeGrams,
+      userPortionGrams: userPortionGrams,
       nutrients: nutrients,
       sources: sources,
       matchedFoodName: merged.matchedFoodName,

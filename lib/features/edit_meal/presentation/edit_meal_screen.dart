@@ -1030,7 +1030,11 @@ class _EditMealScreenState extends State<EditMealScreen> {
       if (result.packageSizeGrams case final grams?) {
         _mealQuantityTextController.text = quantityText(grams);
       }
-      if (result.servingSizeGrams case final grams?) {
+      // The serving field gets the portion the user typed on the scan
+      // screen first — it is the serving they actually eat — and falls
+      // back to the serving the label stated when they typed none.
+      if (result.userPortionGrams ?? result.servingSizeGrams
+          case final grams?) {
         _servingQuantityTextController.text = quantityText(grams);
       }
       if (result.nutrients['energyKcal100'] case final kcal?) {

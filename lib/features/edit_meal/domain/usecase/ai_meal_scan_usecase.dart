@@ -63,7 +63,8 @@ enum AiMealScanPhase { reading, researching, completing }
 /// Reads a packaged-food label, researches the product, and completes the
 /// nutrient profile.
 ///
-/// Three steps, two of them model calls through [StructuredToolApi]:
+/// Three steps, the outer two of them model calls through
+/// [StructuredToolApi]:
 ///
 /// 1. **OCR** — the back photo (front optional) is transcribed. The prompt
 ///    forbids estimation on this step; what the label printed is the only
@@ -74,7 +75,9 @@ enum AiMealScanPhase { reading, researching, completing }
 ///    uses.
 /// 3. **Merge** — a text-only call that receives the label JSON, the
 ///    database records and the user's hints, and fills every nutrient by
-///    the precedence in its prompt.
+///    the precedence in its prompt. A **gap-fill** call follows only when
+///    the merge omitted nutrients nobody else covered — a small, rare
+///    second asking rather than a 43-of-44 answer.
 ///
 /// The source tag on every final value is computed here from what each
 /// side actually contained (see [AiMealScanResult.build]) rather than
@@ -107,6 +110,12 @@ class AiMealScanUseCase {
     if (selection == null) return const AiMealScanUnavailable();
     final api = _apiFactory(selection);
 
+    // Parsed once, used twice: as a merge hint (it disambiguates nothing
+    // about per-100 values, but tells the model what the user is eating)
+    // and carried into the result so the form can prefill the serving
+    // field with it — the portion the user typed is their serving.
+    final userPortion = aiScanNumber(portionGrams);
+
     try {
       onPhase?.call(AiMealScanPhase.reading);
       final label = AiLabelData.fromToolArguments(
@@ -138,8 +147,27 @@ class AiMealScanUseCase {
         );
       }
 
+      // A record's value for a nutrient the label already printed can
+      // never win (precedence 1), so only the gap keys ride along — fewer
+      // numbers for the model to read past, and a record that fills no gap
+      // drops out entirely. The full maps above still drive the source
+      // tags, which is why they are kept separately.
+      final mergeRecords = <Map<String, Object>>[];
+      for (final record in records) {
+        final gapNutrients = <String, double>{
+          for (final entry in record.nutrients.entries)
+            if (!label.nutrients.containsKey(entry.key)) entry.key: entry.value,
+        };
+        if (gapNutrients.isEmpty) continue;
+        mergeRecords.add({
+          'source': record.sourceLabel,
+          'name': record.name,
+          'nutrients': gapNutrients,
+        });
+      }
+
       onPhase?.call(AiMealScanPhase.completing);
-      final merged = AiMergedNutrients.fromToolArguments(
+      var merged = AiMergedNutrients.fromToolArguments(
         await api.requestToolJson(
           system: mergeNutrientsSystemPrompt,
           userPrompt: jsonEncode({
@@ -156,18 +184,9 @@ class AiMealScanUseCase {
               'supermarket': supermarket.trim().isEmpty
                   ? null
                   : supermarket.trim(),
-              'portionGrams': double.tryParse(
-                portionGrams.replaceAll(',', '.'),
-              ),
+              'portionGrams': userPortion,
             },
-            'databaseRecords': [
-              for (final record in records)
-                {
-                  'source': record.sourceLabel,
-                  'name': record.name,
-                  'nutrients': record.nutrients,
-                },
-            ],
+            'databaseRecords': mergeRecords,
           }),
           photos: const [],
           toolName: mergeNutrientsToolName,
@@ -176,11 +195,47 @@ class AiMealScanUseCase {
         ),
       );
 
+      // Completeness is asked for, not guaranteed: live runs of the merge
+      // at high reasoning effort dropped one to three of the 44 keys at
+      // random, and no schema `required` list stopped it. Everything a
+      // record measured is already covered — [AiMealScanResult.build]
+      // applies the record-preference rule itself — so only what nobody
+      // covered is asked for again, and only when such a gap exists.
+      final stillMissing = <String>[
+        for (final key in aiScanNutrientUnits.keys)
+          if (!label.nutrients.containsKey(key) &&
+              !merged.nutrients.containsKey(key) &&
+              !databaseNutrients.containsKey(key))
+            key,
+      ];
+      if (stillMissing.isNotEmpty) {
+        final fill = AiMergedNutrients.fromToolArguments(
+          await api.requestToolJson(
+            system: scanGapFillSystemPrompt,
+            userPrompt: jsonEncode({
+              'name': label.productName,
+              'brand': label.brand,
+              'isDrink': label.isDrink,
+              'knownNutrients': {...label.nutrients, ...merged.nutrients},
+            }),
+            photos: const [],
+            toolName: scanGapFillToolName,
+            toolDescription: scanGapFillToolDescription,
+            toolSchema: scanGapFillToolSchema(stillMissing),
+          ),
+        );
+        merged = AiMergedNutrients(
+          nutrients: {...merged.nutrients, ...fill.nutrients},
+          matchedFoodName: merged.matchedFoodName,
+        );
+      }
+
       return AiMealScanDone(
         AiMealScanResult.build(
           label: label,
           databaseNutrients: databaseNutrients,
           merged: merged,
+          userPortionGrams: userPortion,
         ),
       );
     } on MealInterpreterException catch (e) {
