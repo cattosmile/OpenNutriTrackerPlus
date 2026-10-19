@@ -19,7 +19,15 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-26
+    # macos-15 (Intel), not macos-26: two dispatches on 2026-10-19 died
+    # queued with "not acquired by Runner even after multiple attempts"
+    # (arm64 capacity), while macos-15 picked up the integration suite
+    # twice in the same hour. DEVELOPER_DIR pins Xcode 26.2 like
+    # ios-integration-attempt.yml — device_info_plus needs its SDK
+    # headers and macos-15's default Xcode is too old.
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     timeout-minutes: 60
     steps:
       - name: Checkout code
