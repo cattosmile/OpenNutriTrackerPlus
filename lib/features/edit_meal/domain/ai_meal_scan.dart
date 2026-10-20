@@ -158,6 +158,33 @@ Rules:
 - isDrink: true for beverages (water, juice, soda, milk drinks), false
   otherwise.''';
 
+const scanIdentifyToolName = 'identify_food_photo';
+
+const scanIdentifyToolDescription =
+    'Identify the unpackaged food shown in the photograph.';
+
+/// The photo-first half of a scan without a nutrition table: a bakery roll,
+/// a piece from the display case, anything that never carried printed
+/// values. Reuses [scanLabelToolSchema] — every field it carries is one this
+/// step can honestly answer, and `nutrients` comes back empty because the
+/// prompt forbids estimating here, exactly as the OCR step does.
+const scanIdentifySystemPrompt = '''
+You look at photographs of food that carries no nutrition table — a bakery
+item, food from a display or counter, a home-cooked dish — so a nutrition
+tracker can search for it. You identify; you never estimate on this step.
+
+Rules:
+- The photograph shows the food itself.
+- productName: what the food is, as a shopper would name it in the local
+  language ("Laugenbrötchen"). Keep a visible variety or topping in the name
+  ("Vollkornbrötchen", "Käsebrötchen").
+- brand: only when the photograph itself shows one — a wrapper, a bag, a
+  shop sign. Empty when none is visible.
+- isDrink: true for beverages, false otherwise.
+- nutrients, packageSizeGrams, servingSizeGrams: a food without a printed
+  table states none of these. Return them empty — never estimate here;
+  later steps research and fill.''';
+
 const mergeNutrientsToolName = 'complete_food_nutrients';
 
 const mergeNutrientsToolDescription =
@@ -198,8 +225,9 @@ nor any record has it, estimate it.
 Precedence:
 1. Label values were measured by the manufacturer. Copy them unchanged and
    never adjust one, even when a database record disagrees.
-2. For nutrients missing from the label, prefer a database record of the
-   same product or a very close match (same food, same brand or category).
+2. For nutrients missing from the label, prefer a record of the same product
+   or a very close match (same food, same brand). Between records, a
+   brand-specific one — database or web — beats a generic category one.
 3. Estimate yourself only where neither the label nor any record has the
    nutrient, from food-composition knowledge. Zero is a legitimate value
    only when the food credibly contains none (cholesterol in a plant

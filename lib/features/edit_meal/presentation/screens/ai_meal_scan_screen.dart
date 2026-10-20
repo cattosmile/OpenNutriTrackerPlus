@@ -165,21 +165,31 @@ class _AiMealScanScreenState extends State<AiMealScanScreen> {
   Future<void> _analyze() async {
     FocusScope.of(context).unfocus();
     final back = _backPhoto;
-    if (back == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context).aiScanNoBackPhotoLabel)),
-      );
+    final front = _frontPhoto;
+    // A label photo is the packaged-food path; without one a food photo or
+    // a typed product name has to seed the scan instead — brand alone is
+    // not an identity, so it does not count.
+    if (back == null &&
+        front == null &&
+        _productNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(S.of(context).aiScanNoInputLabel)));
       return;
     }
     setState(() {
-      _runningPhase = AiMealScanPhase.reading;
+      // The first phase the run itself will report — shown while the use
+      // case reads its credentials, before any phase callback lands.
+      _runningPhase = back == null && front != null
+          ? AiMealScanPhase.identifying
+          : AiMealScanPhase.reading;
       _result = null;
       _failure = null;
       _unavailable = false;
     });
     final outcome = await locator<AiMealScanUseCase>().run(
       backPhoto: back,
-      frontPhoto: _frontPhoto,
+      frontPhoto: front,
       supermarket: _supermarketController.text,
       brand: _brandController.text,
       productName: _productNameController.text,
@@ -406,6 +416,7 @@ class _ProgressCard extends StatelessWidget {
     final s = S.of(context);
     final label = switch (phase) {
       AiMealScanPhase.reading => s.aiScanStepReadingLabel,
+      AiMealScanPhase.identifying => s.aiScanStepIdentifyLabel,
       AiMealScanPhase.researching => s.aiScanStepResearchLabel,
       AiMealScanPhase.completing => s.aiScanStepCompletingLabel,
     };

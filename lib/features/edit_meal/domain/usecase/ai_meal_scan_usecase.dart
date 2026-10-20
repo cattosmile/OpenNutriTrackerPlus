@@ -92,7 +92,7 @@ abstract interface class AiMealWebSearch {
 /// Where a scan currently is, for the progress surface. The research step
 /// has no failure state of its own — it degrades to estimation — so this is
 /// narration, not state.
-enum AiMealScanPhase { reading, researching, completing }
+enum AiMealScanPhase { reading, identifying, researching, completing }
 
 /// Reads a packaged-food label, researches the product, and completes the
 /// nutrient profile.
@@ -100,16 +100,23 @@ enum AiMealScanPhase { reading, researching, completing }
 /// Three steps, the outer two of them model calls through
 /// [StructuredToolApi]:
 ///
-/// 1. **OCR** — the back photo (front optional) is transcribed. The prompt
-///    forbids estimation on this step; what the label printed is the only
-///    thing that comes back.
-/// 2. **Research** — no model involved. The barcode and the name the OCR
-///    read are looked up in Open Food Facts and the Supabase food backend,
-///    free of charge, through the same [ProductsRepository] the search tab
-///    uses. When both answer nothing and the user runs a SearXNG instance,
-///    one web search runs through it and the scan's own model extracts the
-///    values the results state ([_webRecord]) — provider-neutral, and the
-///    only part of a scan that touches the open web.
+/// 1. **OCR / identify** — with a back photo the label is transcribed (front
+///    optional); the prompt forbids estimation on this step. Without one —
+///    the bakery roll, the display case — a front photo is *identified*
+///    instead ([scanIdentifySystemPrompt], same schema, nutrients empty),
+///    and a scan with neither photo starts from the typed name and brand.
+///    Every mode produces the same [AiLabelData]; only how much of it is
+///    filled differs.
+/// 2. **Research** — no model involved. The barcode and the name the first
+///    step read are looked up in Open Food Facts and the Supabase food
+///    backend, free of charge, through the same [ProductsRepository] the
+///    search tab uses. When both answer nothing and the user runs a SearXNG
+///    instance, one web search runs through it and the scan's own model
+///    extracts the values the results state ([_webRecord]) — provider-neutral,
+///    and the only part of a scan that touches the open web. A scan without
+///    a back photo always runs that web search, generic database records
+///    notwithstanding: without a printed table, a brand's own published
+///    values are the closest thing to a label this scan will ever see.
 /// 3. **Merge** — a text-only call that receives the label JSON, the
 ///    database records and the user's hints, and fills every nutrient by
 ///    the precedence in its prompt. A **gap-fill** call follows only when
@@ -140,7 +147,7 @@ class AiMealScanUseCase {
   );
 
   Future<AiMealScanOutcome> run({
-    required MealPhoto backPhoto,
+    MealPhoto? backPhoto,
     MealPhoto? frontPhoto,
     String supermarket = '',
     String brand = '',
@@ -160,19 +167,14 @@ class AiMealScanUseCase {
     final userPortion = aiScanNumber(portionGrams);
 
     try {
-      onPhase?.call(AiMealScanPhase.reading);
-      final label = AiLabelData.fromToolArguments(
-        await api.requestToolJson(
-          system: localeCode == null
-              ? scanLabelSystemPrompt
-              : '$scanLabelSystemPrompt\nThe user\'s app language is '
-                    '"$localeCode".',
-          userPrompt: 'Transcribe this product\'s label.',
-          photos: [backPhoto, ?frontPhoto],
-          toolName: scanLabelToolName,
-          toolDescription: scanLabelToolDescription,
-          toolSchema: scanLabelToolSchema,
-        ),
+      final label = await _readLabel(
+        api: api,
+        backPhoto: backPhoto,
+        frontPhoto: frontPhoto,
+        typedBrand: brand,
+        typedProductName: productName,
+        localeCode: localeCode,
+        onPhase: onPhase,
       );
 
       final records = await _researchRecords(
@@ -181,11 +183,15 @@ class AiMealScanUseCase {
         typedProductName: productName,
       );
       onPhase?.call(AiMealScanPhase.researching);
-      // The last resort. Both free databases empty is the store-brand case
-      // this step exists for, and it runs only then — a web result sits
-      // below a database record in trust, so paying its latency when a
-      // record already answered would buy nothing.
-      if (records.isEmpty) {
+      // The last resort — with an exception. Both free databases empty is
+      // the store-brand case this step exists for, and there it runs only
+      // then: a web result sits below a database record in trust, so paying
+      // its latency when a record already answered would buy nothing. But a
+      // scan without a printed table has no record of *this* product to be
+      // outranked — its database hits are generic category matches — so it
+      // searches the web whatever they said: the brand's own published
+      // values are the closest thing to a label it will ever see.
+      if (records.isEmpty || backPhoto == null) {
         final webRecord = await _webRecord(
           api: api,
           label: label,
@@ -312,6 +318,56 @@ class AiMealScanUseCase {
       _log.severe('Meal scan failed unexpectedly', e, stackTrace);
       return const AiMealScanFailed(MealInterpreterFailure.transient);
     }
+  }
+
+  /// The identity half of a scan: what the first model call, if any, read.
+  ///
+  /// A back photo is transcribed as a label; a front photo alone is
+  /// identified as a food — no table exists to transcribe, so the reply
+  /// carries a name at most; and a scan with neither photo starts from what
+  /// the user typed, with no model call at all. All three modes land in the
+  /// same [AiLabelData]; nothing after this method can tell them apart.
+  Future<AiLabelData> _readLabel({
+    required StructuredToolApi api,
+    required MealPhoto? backPhoto,
+    required MealPhoto? frontPhoto,
+    required String typedBrand,
+    required String typedProductName,
+    required String? localeCode,
+    required void Function(AiMealScanPhase phase)? onPhase,
+  }) async {
+    if (backPhoto == null && frontPhoto == null) {
+      return AiLabelData(
+        productName: _trimOrNull(typedProductName),
+        brand: _trimOrNull(typedBrand),
+      );
+    }
+    final identify = backPhoto == null;
+    onPhase?.call(
+      identify ? AiMealScanPhase.identifying : AiMealScanPhase.reading,
+    );
+    final system = identify ? scanIdentifySystemPrompt : scanLabelSystemPrompt;
+    return AiLabelData.fromToolArguments(
+      await api.requestToolJson(
+        system: localeCode == null
+            ? system
+            : '$system\nThe user\'s app language is "$localeCode".',
+        userPrompt: identify
+            ? 'Identify this food.'
+            : 'Transcribe this product\'s label.',
+        photos: [?backPhoto, ?frontPhoto],
+        toolName: identify ? scanIdentifyToolName : scanLabelToolName,
+        toolDescription: identify
+            ? scanIdentifyToolDescription
+            : scanLabelToolDescription,
+        toolSchema: scanLabelToolSchema,
+      ),
+    );
+  }
+
+  static String? _trimOrNull(String raw) {
+    final trimmed = raw.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   /// Barcode lookup first — an exact product beats any text search — then a

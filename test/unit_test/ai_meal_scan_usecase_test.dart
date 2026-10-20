@@ -461,6 +461,119 @@ void main() {
       expect(result.sources['proteins100'], AiLabelValueSource.estimated);
     });
   });
+
+  group('a scan without a back photo (the bakery case)', () {
+    // A Brötchen from the bakery carries no table: the front photo is
+    // identified instead of transcribed, and because no printed label
+    // exists, the web search runs even when the databases answered — their
+    // hits are generic category records, and the brand's own published
+    // values are the closest thing to a label this scan will ever see.
+    test('a front photo is identified, and the web runs regardless', () async {
+      final api = _FakeToolApi([
+        // The identify reply: a name at most, never nutrients.
+        {'productName': 'Laugenbrötchen', 'brand': 'Ditsch', 'nutrients': {}},
+        // The web extraction: what ditsch.de states.
+        {
+          'nutrients': {'energyKcal100': 309, 'carbohydrates100': 49},
+        },
+        {
+          // A complete merge, so no gap-fill reply is needed.
+          'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 1},
+        },
+      ]);
+      final research = _FakeResearch()
+        ..nameRecords = [
+          const AiFoodRecord('USDA FDC / BLS', 'Laugenbrötchen, ', {
+            'sodium100': 600,
+          }),
+        ];
+      final web = _FakeWebSearch()
+        ..hits = [
+          const AiMealWebHit(
+            title: 'Laugenbrötchen 70 g — Ditsch',
+            snippet: '100 g: 309 kcal, 49 g Kohlenhydrate',
+            url: 'https://www.ditsch.de/laugenbrotchen',
+          ),
+        ];
+
+      final phases = <AiMealScanPhase>[];
+      final outcome =
+          await AiMealScanUseCase(
+            await zaiStorage(),
+            (_) => api,
+            research,
+            web,
+          ).run(
+            backPhoto: null,
+            frontPhoto: photo,
+            brand: 'Ditsch',
+            productName: 'Laugenbrötchen',
+            portionGrams: '70',
+            localeCode: 'de',
+            onPhase: phases.add,
+          );
+
+      // The identify call replaced the OCR, with the one photo.
+      expect(api.calls.first.toolName, scanIdentifyToolName);
+      expect(api.calls.first.photos, 1);
+      expect(phases.first, AiMealScanPhase.identifying);
+      // Research still ran, and so did the web — despite the record.
+      expect(research.queries, ['Ditsch Laugenbrötchen']);
+      expect(web.queries, ['Ditsch Laugenbrötchen Nährwerte']);
+      expect(api.calls[1].toolName, scanWebExtractToolName);
+      // The web's stated values tag Web; the record's tag Database.
+      final result = (outcome as AiMealScanDone).result;
+      expect(result.name, 'Laugenbrötchen');
+      expect(result.brand, 'Ditsch');
+      expect(result.userPortionGrams, 70);
+      expect(result.sources['energyKcal100'], AiLabelValueSource.web);
+      expect(result.sources['sodium100'], AiLabelValueSource.database);
+    });
+
+    test('a typed name alone scans without any vision call', () async {
+      final api = _FakeToolApi([
+        // The extraction: what the hit stated. No identify reply is queued
+        // before it — no photo, no vision call.
+        {
+          'nutrients': {'energyKcal100': 309},
+        },
+        {
+          'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 1},
+        },
+      ]);
+      final web = _FakeWebSearch()
+        ..hits = [
+          const AiMealWebHit(
+            title: 'Laugenbrötchen — Ditsch',
+            snippet: '100 g: 309 kcal',
+            url: 'https://www.ditsch.de/laugenbrotchen',
+          ),
+        ];
+
+      final phases = <AiMealScanPhase>[];
+      final outcome =
+          await AiMealScanUseCase(
+            await zaiStorage(),
+            (_) => api,
+            _FakeResearch(),
+            web,
+          ).run(
+            backPhoto: null,
+            frontPhoto: null,
+            brand: 'Ditsch',
+            productName: 'Laugenbrötchen',
+            onPhase: phases.add,
+          );
+
+      // The typed name is the whole identity: no model call before the
+      // research, and the narration starts at researching.
+      expect(api.calls.first.toolName, scanWebExtractToolName);
+      expect(phases.first, AiMealScanPhase.researching);
+      final result = (outcome as AiMealScanDone).result;
+      expect(result.name, 'Laugenbrötchen');
+      expect(result.brand, 'Ditsch');
+    });
+  });
 }
 
 class _FakeToolApi implements StructuredToolApi {
