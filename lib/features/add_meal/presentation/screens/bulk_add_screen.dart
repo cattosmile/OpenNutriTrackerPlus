@@ -1326,6 +1326,7 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
       // string is flat where OpenRouter's is parameterised.
       AiProvider.openai => S.of(context).bulkAddPhotoDisclosureOpenAI,
       AiProvider.zai => S.of(context).bulkAddPhotoDisclosureZai,
+      AiProvider.google => S.of(context).bulkAddPhotoDisclosureGoogle,
       // The address, and nothing beyond it. Not "no third party receives it",
       // however tempting: the app cannot tell a local runtime from a
       // self-hosted proxy forwarding to OpenAI, and #732 ruled those out of

@@ -35,14 +35,17 @@ enum MealPhotoFormat {
 
   const MealPhotoFormat(this.compress, this.mediaType);
 
-  /// Exhaustive on purpose. A fifth provider has to answer this question
+  /// Exhaustive on purpose. A new provider has to answer this question
   /// rather than inherit whichever answer a wildcard happened to give it.
   static MealPhotoFormat forProvider(AiProvider provider) => switch (provider) {
     AiProvider.anthropic || AiProvider.openrouter || AiProvider.openai => webp,
     // Z.ai documents jpg/jpeg/png for its vision inputs and says nothing
     // about WebP, so it gets the format every runtime decodes rather than
     // the one that is merely smaller.
-    AiProvider.zai => jpeg,
+    //
+    // Gemini decodes WebP too, but jpeg keeps one shared path for the two
+    // reasoning providers and the bytes cross the internet either way.
+    AiProvider.zai || AiProvider.google => jpeg,
     AiProvider.ownServer => jpeg,
   };
 }

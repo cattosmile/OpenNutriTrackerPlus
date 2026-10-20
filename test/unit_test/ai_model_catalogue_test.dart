@@ -56,6 +56,22 @@ void main() {
         'anthropic/claude-sonnet-5',
       );
     });
+
+    test('Google offers the fast Lite by default and 3.8 Flash beside it', () {
+      // Order is behaviour, like every list here: the head is what an
+      // untouched install resolves to, and the Lite model measured the
+      // 13–19 s full-scan budget this provider was added for (2026-10-19).
+      final models = AiModelCatalogue.forProvider(AiProvider.google);
+      expect(models.map((m) => m.id), [
+        'gemini-3.5-flash-lite',
+        'gemini-3.8-flash',
+      ]);
+      expect(models.every((m) => m.servedBy == 'Google'), isTrue);
+      expect(
+        AiModelCatalogue.resolve(AiProvider.google, null)!.id,
+        'gemini-3.5-flash-lite',
+      );
+    });
   });
 
   group('what a row is allowed to say about itself', () {
@@ -69,10 +85,12 @@ void main() {
           reason: '${provider.name} head is labelled Recommended by position',
         );
         // Scoped to the behaviourally screened lists, whose notes are
-        // measurements. Z.ai's rows carry none on purpose — nothing has been
-        // measured for GLM, and a note is exactly the claim a row must not
-        // make without that.
-        if (provider == AiProvider.zai) continue;
+        // measurements. Z.ai's and Google's rows carry none on purpose —
+        // nothing has been measured for GLM or Gemini, and a note is
+        // exactly the claim a row must not make without that.
+        if (provider == AiProvider.zai || provider == AiProvider.google) {
+          continue;
+        }
         for (final model in models.skip(1)) {
           expect(
             model.note,

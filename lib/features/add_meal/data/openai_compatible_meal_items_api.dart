@@ -92,6 +92,13 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi, StructuredToolApi {
     'https://api.z.ai/api/coding/paas/v4/chat/completions',
   );
 
+  /// The AI Studio API's OpenAI-compatible chat-completions endpoint. A
+  /// free-tier key from AI Studio answers here; a Google AI subscription
+  /// adds nothing to it, so the free request budget is what it is.
+  static final googleEndpoint = Uri.parse(
+    'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+  );
+
   static const _maxTokens = 1024;
 
   /// Token budget for models that reason before answering — the reasoning
@@ -147,15 +154,19 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi, StructuredToolApi {
   /// the behaviour that was deliberate for them.
   final MealInterpreterFailure timeoutFailure;
 
-  /// Z.ai's reasoning-effort level (`low` / `high` / `max`), or null for
-  /// destinations without one.
+  /// Z.ai's reasoning-effort level (`low` / `high` / `max`, Gemini's
+  /// `low` / `medium` / `high`), or null for destinations without one.
   ///
   /// GLM-5.3 models always think — the wire has no "off" — so this is the
-  /// only control, and the pair of body fields it emits (`thinking:
-  /// {"type": "enabled"}` plus itself) is what the coding-plan endpoint
-  /// documents. Sending them anywhere else would be a claim about that
-  /// destination's API the app has not made.
+  /// only control, and the pair of body fields it emits is what the
+  /// coding-plan endpoint documents. Sending them anywhere else would be a
+  /// claim about that destination's API the app has not made.
   final String? reasoningEffort;
+
+  /// Whether [reasoningEffort] is accompanied by Z.ai's `thinking` toggle
+  /// body field. Gemini's compatibility layer rejects the field outright
+  /// ("Unknown name \"thinking\""), so the effort travels alone there.
+  final bool reasoningToggle;
 
   OpenAiCompatibleMealItemsApi(
     this._client,
@@ -168,6 +179,7 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi, StructuredToolApi {
     this.timeout = defaultTimeout,
     this.timeoutFailure = MealInterpreterFailure.transient,
     this.reasoningEffort,
+    this.reasoningToggle = false,
   });
 
   /// The OpenRouter configuration, named so call sites read as intent rather
@@ -196,7 +208,7 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi, StructuredToolApi {
       'model': model,
       'max_tokens': reasoningEffort == null ? _maxTokens : _reasoningMaxTokens,
       if (reasoningEffort case final effort?) ...{
-        'thinking': {'type': 'enabled'},
+        if (reasoningToggle) 'thinking': {'type': 'enabled'},
         'reasoning_effort': effort,
       },
       // No top-level `system` field here: the OpenAI-compatible shape wants
@@ -316,7 +328,7 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi, StructuredToolApi {
           ? _structuredMaxTokens
           : _structuredReasoningMaxTokens,
       if (reasoningEffort case final effort?) ...{
-        'thinking': {'type': 'enabled'},
+        if (reasoningToggle) 'thinking': {'type': 'enabled'},
         'reasoning_effort': effort,
       },
       'messages': [
@@ -689,6 +701,22 @@ class OpenAiCompatibleMealItemsApi implements MealItemsApi, StructuredToolApi {
   /// the way OpenRouter's 402 does — a state that does not clear on its own
   /// and whose remedy ("check your plan") is not "try again".
   static MealInterpreterFailure zaiFailureFor(int statusCode) =>
+      switch (statusCode) {
+        401 || 403 => MealInterpreterFailure.auth,
+        400 || 422 => MealInterpreterFailure.rejected,
+        402 || 429 => MealInterpreterFailure.billing,
+        404 => MealInterpreterFailure.unsupported,
+        _ => MealInterpreterFailure.transient,
+      };
+
+  /// What the AI Studio compatibility endpoint's status codes mean.
+  ///
+  /// Measured against a free-tier key: 429 arrives the instant the daily
+  /// request budget is gone ("You exceeded your current quota"), which
+  /// clears at midnight Pacific — a state whose remedy ("check the plan")
+  /// is not "try again", so it maps as billing, exactly like Z.ai's
+  /// spent-plan 429. Everything else follows the zai reading.
+  static MealInterpreterFailure googleFailureFor(int statusCode) =>
       switch (statusCode) {
         401 || 403 => MealInterpreterFailure.auth,
         400 || 422 => MealInterpreterFailure.rejected,

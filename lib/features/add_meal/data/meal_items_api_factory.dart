@@ -55,6 +55,16 @@ const ownServerTimeout = Duration(seconds: 120);
 /// so the ceiling has to clear an outlier run with margin, not the average.
 const zaiTimeout = Duration(seconds: 150);
 
+/// How long Google's AI Studio endpoint is given to answer.
+///
+/// Measured 2026-10-19 on `gemini-3.5-flash-lite`: the full two-call label
+/// scan (photos + merge) answered in 13–19 s at effort low/medium, 28 s at
+/// high. The ceiling that matters is `gemini-3.8-flash` at a high effort —
+/// its time-to-first-token alone measured ~22 s under load — so 90 s
+/// clears the slowest offered combination with margin while still failing
+/// a genuinely stuck request within one attention span.
+const googleTimeout = Duration(seconds: 90);
+
 /// How long a setup-time probe waits for an endpoint the user just typed.
 ///
 /// **Defined as [ownServerTimeout] rather than as its own number, and that
@@ -125,8 +135,8 @@ MealItemsApi mealItemsApiFor(
       key,
       model: modelId,
       endpoint: OpenAiCompatibleMealItemsApi.zaiEndpoint,
-      reasoningEffort:
-          (selection.reasoningEffort ?? AiReasoningEffort.high).name,
+      reasoningEffort: _effortFor(selection),
+      reasoningToggle: true,
       failureFor: OpenAiCompatibleMealItemsApi.zaiFailureFor,
       // A timeout here is the same fact #774 measured on a user's own
       // server: the model was still working and the network was fine.
@@ -135,6 +145,23 @@ MealItemsApi mealItemsApiFor(
       // debug a 5G link that had been carrying the request the whole time.
       timeoutFailure: MealInterpreterFailure.timeout,
       timeout: timeout ?? zaiTimeout,
+    ),
+    // Google's Gemini models on the AI Studio compatibility endpoint. The
+    // same wire format as Z.ai minus the `thinking` toggle — Gemini rejects
+    // that field — with its own level set and its own default of `medium`,
+    // the level measured balancing the 13–19 s scan budget against estimate
+    // quality. No web search: the compatibility layer refuses a
+    // `google_search` tool, and grounded calls on a free-tier key answer
+    // 429 before thinking.
+    AiProvider.google => OpenAiCompatibleMealItemsApi(
+      client,
+      key,
+      model: modelId,
+      endpoint: OpenAiCompatibleMealItemsApi.googleEndpoint,
+      reasoningEffort: _effortFor(selection),
+      failureFor: OpenAiCompatibleMealItemsApi.googleFailureFor,
+      timeoutFailure: MealInterpreterFailure.timeout,
+      timeout: timeout ?? googleTimeout,
     ),
     // The user's own address, no broker, and **no forcing by name**: #733
     // measured that Ollama has no `tool_choice` field at all and llama.cpp
@@ -175,3 +202,15 @@ StructuredToolApi structuredToolApiFor(
   http.Client client,
   AiSelection selection,
 ) => mealItemsApiFor(client, selection) as StructuredToolApi;
+
+/// The stored effort when the destination accepts it, else that
+/// destination's default — a level the API rejects (Z.ai has no `medium`,
+/// Gemini no `max`) fails the whole request, and a stored value can only
+/// predate a provider switch that kept the per-provider slot by mistake.
+String? _effortFor(AiSelection selection) {
+  final valid = AiReasoningEffort.forProvider(selection.provider);
+  if (valid.isEmpty) return null;
+  final stored = selection.reasoningEffort;
+  if (stored != null && valid.contains(stored)) return stored.name;
+  return valid.first.name;
+}

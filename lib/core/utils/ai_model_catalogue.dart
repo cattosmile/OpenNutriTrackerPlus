@@ -205,6 +205,26 @@ abstract final class AiModelCatalogue {
     AiModel(id: 'glm-5.3-flashx', servedBy: 'Z.ai'),
   ];
 
+  /// Google's Gemini models through the OpenAI-compatible AI Studio
+  /// endpoint — **multimodal entries only**, like the Z.ai list.
+  ///
+  /// Upstream deliberately excluded Google (a distribution test and a
+  /// training clause that covers free-tier submissions — see the note on
+  /// [AiModelCatalogue]); this fork adds it anyway, at its user's explicit
+  /// request, for a measured reason: the label-scan pipeline answered in
+  /// 13–19 s against ~100 s on GLM, at equal estimate quality. The policy
+  /// trade-off is the user's to make on a fork whose destinations they
+  /// configure themselves.
+  ///
+  /// No `note` — same rule as Z.ai: no behavioural screen has run, and every
+  /// note above is a measurement. The Lite model leads because it was
+  /// measured fastest; 3.8 Flash is offered as the stronger, slower option
+  /// and sits on a much smaller free-tier request budget.
+  static const google = <AiModel>[
+    AiModel(id: 'gemini-3.5-flash-lite', servedBy: 'Google'),
+    AiModel(id: 'gemini-3.8-flash', servedBy: 'Google'),
+  ];
+
   /// Empty for [AiProvider.ownServer], and that is the answer rather than a
   /// gap. Membership of the lists above requires a behavioural screen the
   /// project cannot run against a machine it has never seen, and the user
@@ -215,6 +235,7 @@ abstract final class AiModelCatalogue {
     AiProvider.openrouter => openrouter,
     AiProvider.openai => openai,
     AiProvider.zai => zai,
+    AiProvider.google => google,
     AiProvider.ownServer => const [],
   };
 

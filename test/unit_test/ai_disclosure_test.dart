@@ -21,7 +21,8 @@ void main() {
         expect(
           entry.value,
           isNotEmpty,
-          reason: '${entry.key.name} has no paragraph, so enabling it would '
+          reason:
+              '${entry.key.name} has no paragraph, so enabling it would '
               'say nothing about where the data goes',
         );
       }
@@ -30,7 +31,8 @@ void main() {
       expect(
         byProvider.values.toSet(),
         hasLength(AiProvider.values.length),
-        reason: 'two providers share a paragraph, so one of them names a '
+        reason:
+            'two providers share a paragraph, so one of them names a '
             'destination that is not where the data is going',
       );
     });
@@ -67,6 +69,10 @@ void main() {
       expect(
         aiDisclosureFor(s, provider: AiProvider.openai),
         s.aiAssistDisclosureOpenAI,
+      );
+      expect(
+        aiDisclosureFor(s, provider: AiProvider.google),
+        s.aiAssistDisclosureGoogle,
       );
     });
 
@@ -107,21 +113,23 @@ void main() {
       }
     });
 
-    test('a credential pasted into the address never reaches the paragraph',
-        () {
-      final s = lookupS(const Locale('en'));
-      final rendered = aiDisclosureFor(
-        s,
-        provider: AiProvider.ownServer,
-        typedEndpoint: 'http://someone:hunter2@box.local:11434',
-      );
+    test(
+      'a credential pasted into the address never reaches the paragraph',
+      () {
+        final s = lookupS(const Locale('en'));
+        final rendered = aiDisclosureFor(
+          s,
+          provider: AiProvider.ownServer,
+          typedEndpoint: 'http://someone:hunter2@box.local:11434',
+        );
 
-      expect(
-        rendered,
-        isNot(contains('hunter2')),
-        reason: 'the paragraph would be rendering the password on screen',
-      );
-      expect(rendered, contains('box.local:11434'));
-    });
+        expect(
+          rendered,
+          isNot(contains('hunter2')),
+          reason: 'the paragraph would be rendering the password on screen',
+        );
+        expect(rendered, contains('box.local:11434'));
+      },
+    );
   });
 }

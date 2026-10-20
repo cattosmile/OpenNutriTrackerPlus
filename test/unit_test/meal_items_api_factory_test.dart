@@ -187,6 +187,55 @@ void main() {
       expect(low.body!['reasoning_effort'], 'low');
       expect(max.body!['reasoning_effort'], 'max');
     });
+
+    test(
+      'Google goes to the AI Studio compatibility endpoint, no thinking toggle',
+      () async {
+        final client = await send(
+          const AiSelection(provider: AiProvider.google, apiKey: 'g-key'),
+        );
+
+        expect(client.url!.host, 'generativelanguage.googleapis.com');
+        expect(client.url!.path, '/v1beta/openai/chat/completions');
+        expect(client.headers!['authorization'], 'Bearer g-key');
+        expect(client.body!['model'], 'gemini-3.5-flash-lite');
+
+        // Measured against the endpoint: `thinking` is rejected outright
+        // ("Unknown name"), while `reasoning_effort` is accepted — so the
+        // effort travels alone. Unset reads as `medium`, the level measured
+        // balancing the 13–19 s scan budget against estimate quality.
+        expect(client.body!.containsKey('thinking'), isFalse);
+        expect(client.body!['reasoning_effort'], 'medium');
+        expect(client.body!['max_tokens'], greaterThan(1024));
+        expect(client.body!.containsKey('provider'), isFalse);
+      },
+    );
+
+    test(
+      'Google levels map, Z.ai levels do not survive a slot mix-up',
+      () async {
+        final low = await send(
+          const AiSelection(
+            provider: AiProvider.google,
+            apiKey: 'g-key',
+            reasoningEffort: AiReasoningEffort.low,
+          ),
+        );
+        // `max` is a Z.ai level; Gemini rejects it, so a value like this —
+        // only reachable through a hand-edited store — falls back to the
+        // provider default rather than failing the whole request.
+        final maxFromZai = await send(
+          const AiSelection(
+            provider: AiProvider.google,
+            apiKey: 'g-key',
+            reasoningEffort: AiReasoningEffort.max,
+          ),
+        );
+
+        expect(low.body!['reasoning_effort'], 'low');
+        expect(maxFromZai.body!['reasoning_effort'], 'medium');
+      },
+    );
   });
 
   group('the model the settings screen named is the model that is sent', () {
@@ -418,6 +467,23 @@ void main() {
       );
     });
 
+    test('Google clears its slowest offered combination', () {
+      // Measured 2026-10-19: the full two-call scan answered 13–19 s on
+      // gemini-3.5-flash-lite, but the ceiling exists for gemini-3.8-flash
+      // at effort high, whose time-to-first-token alone measured ~22 s — so
+      // the budget must clear that with margin while staying under the
+      // own-server class.
+      final google =
+          mealItemsApiFor(
+                CapturingClient(),
+                const AiSelection(provider: AiProvider.google, apiKey: 'g'),
+              )
+              as OpenAiCompatibleMealItemsApi;
+      expect(google.timeout, googleTimeout);
+      expect(googleTimeout.inSeconds, greaterThan(30));
+      expect(googleTimeout, lessThan(ownServerTimeout));
+    });
+
     test('the slow destinations call a timeout a timeout', () {
       // The classification travels with the budget, and only together do
       // they mean anything: the longer wait stops a cold load failing at
@@ -435,6 +501,14 @@ void main() {
               )
               as OpenAiCompatibleMealItemsApi;
       expect(zai.timeoutFailure, MealInterpreterFailure.timeout);
+
+      final google =
+          mealItemsApiFor(
+                CapturingClient(),
+                const AiSelection(provider: AiProvider.google, apiKey: 'g'),
+              )
+              as OpenAiCompatibleMealItemsApi;
+      expect(google.timeoutFailure, MealInterpreterFailure.timeout);
 
       final openrouter =
           mealItemsApiFor(
