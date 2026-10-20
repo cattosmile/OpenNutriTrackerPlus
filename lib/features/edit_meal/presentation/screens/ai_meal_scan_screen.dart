@@ -13,14 +13,18 @@ import 'package:opennutritracker/features/edit_meal/domain/usecase/ai_meal_scan_
 import 'package:opennutritracker/features/edit_meal/presentation/micro_field_specs.dart';
 import 'package:opennutritracker/generated/l10n.dart';
 
+/// What the scan screen pops with: the values the form prefill needs, plus
+/// the front photo to reuse as the meal's image (null when none was picked).
+typedef AiMealScanPayload = ({AiMealScanResult result, MealPhoto? frontPhoto});
+
 /// Photographs a packaged food's label and lets the model + the free food
 /// databases fill the custom-meal form.
 ///
 /// Entered from the edit-meal screen's sparkle action; pops with an
-/// [AiMealScanResult] for the form to prefill, or null when the user backs
-/// out. Photos live as encoded bytes in this screen's state only — the
-/// picker's cache copy is deleted on encode, matching the disclosure the
-/// pick sheet shows.
+/// [AiMealScanPayload] for the form to prefill, or null when the user backs
+/// out. Photos live as encoded bytes in this screen's state until one is
+/// popped out as the meal's image — the picker's cache copy is deleted on
+/// encode, matching the disclosure the pick sheet shows.
 class AiMealScanScreen extends StatefulWidget {
   const AiMealScanScreen({super.key});
 
@@ -91,6 +95,7 @@ class _AiMealScanScreenState extends State<AiMealScanScreen> {
       AiProvider.openrouter => s.aiScanDisclosureOpenRouter(destination.name),
       AiProvider.openai => s.aiScanDisclosureOpenAI,
       AiProvider.zai => s.aiScanDisclosureZai,
+      AiProvider.google => s.aiScanDisclosureGoogle,
       AiProvider.ownServer => s.aiScanDisclosureOwnServer(destination.name),
     };
     final source = await showModalBottomSheet<ImageSource>(
@@ -276,7 +281,9 @@ class _AiMealScanScreenState extends State<AiMealScanScreen> {
             else if (_result case final result?)
               _ResultCard(
                 result: result,
-                onApply: () => Navigator.of(context).pop(result),
+                onApply: () => Navigator.of(
+                  context,
+                ).pop((result: result, frontPhoto: _frontPhoto)),
               )
             else if (_failure case final failure?)
               _ErrorCard(message: _failureMessage(s, failure))
@@ -558,6 +565,7 @@ class _SourceChip extends StatelessWidget {
     final (label, color) = switch (source ?? AiLabelValueSource.estimated) {
       AiLabelValueSource.label => (s.aiScanSourceLabelLabel, Colors.green),
       AiLabelValueSource.database => (s.aiScanSourceDatabaseLabel, Colors.blue),
+      AiLabelValueSource.web => (s.aiScanSourceWebLabel, Colors.teal),
       AiLabelValueSource.estimated => (
         s.aiScanSourceEstimatedLabel,
         Colors.orange,

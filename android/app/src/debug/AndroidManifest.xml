@@ -5,4 +5,12 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Debug builds may talk to the plaintext destinations the AI-assist
+         "own server" provider and the SearXNG fallback exist for — a local
+         Ollama, a home-network or loopback-tunnelled SearXNG, all http.
+         The platform default (no cleartext) stays in force for release
+         builds; the app's own plaintext guard polices which private
+         destinations may be asked at all.
+    -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

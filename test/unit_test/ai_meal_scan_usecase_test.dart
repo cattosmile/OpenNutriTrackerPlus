@@ -9,11 +9,13 @@ import 'package:opennutritracker/features/edit_meal/domain/usecase/ai_meal_scan_
 
 /// The scan pipeline against canned model replies and canned research.
 ///
-/// What is pinned here: the two model calls happen in the OCR → merge
-/// order with the research in between; the barcode the OCR read drives the
+/// What is pinned here: the model calls happen in the OCR → merge order
+/// with the research in between; the barcode the OCR read drives the
 /// barcode lookup and the name drives the text search; the label's values
 /// reach the result unchanged; and a missing credential is "unavailable",
-/// not a failure.
+/// not a failure. The web search of last resort — one search plus one
+/// extraction call when both databases answer nothing — is pinned in its
+/// own group below.
 void main() {
   final photo = MealPhoto(
     bytes: Uint8List.fromList([1, 2, 3]),
@@ -38,6 +40,7 @@ void main() {
       configuredStorage(),
       (_) => throw StateError('must not be called'),
       _FakeResearch(),
+      _FakeWebSearch(),
     ).run(backPhoto: photo);
 
     expect(outcome, isA<AiMealScanUnavailable>());
@@ -77,7 +80,12 @@ void main() {
 
     final phases = <AiMealScanPhase>[];
     final outcome =
-        await AiMealScanUseCase(await zaiStorage(), (_) => api, research).run(
+        await AiMealScanUseCase(
+          await zaiStorage(),
+          (_) => api,
+          research,
+          _FakeWebSearch(),
+        ).run(
           backPhoto: photo,
           frontPhoto: photo,
           supermarket: 'Rewe',
@@ -139,6 +147,7 @@ void main() {
         await zaiStorage(),
         (_) => api,
         research,
+        _FakeWebSearch(),
       ).run(backPhoto: photo, brand: 'Gut & Günstig');
 
       expect(research.queries, ['Gut & Günstig Vollkornbrot']);
@@ -157,6 +166,7 @@ void main() {
       await zaiStorage(),
       (_) => api,
       research,
+      _FakeWebSearch(),
     ).run(backPhoto: photo, productName: 'Thunfischfilets in eigenem Saft');
 
     expect(research.queries, ['Kaak Thunfischfilets in eigenem Saft']);
@@ -181,6 +191,7 @@ void main() {
       await zaiStorage(),
       (_) => api,
       research,
+      _FakeWebSearch(),
     ).run(backPhoto: photo);
 
     expect(outcome, isA<AiMealScanDone>());
@@ -216,6 +227,7 @@ void main() {
       await zaiStorage(),
       (_) => api,
       research,
+      _FakeWebSearch(),
     ).run(backPhoto: photo);
 
     expect(outcome, isA<AiMealScanDone>());
@@ -239,6 +251,7 @@ void main() {
       await zaiStorage(),
       (_) => api,
       _FakeResearch(),
+      _FakeWebSearch(),
     ).run(backPhoto: photo, portionGrams: '92,5');
 
     expect((outcome as AiMealScanDone).result.userPortionGrams, 92.5);
@@ -257,6 +270,7 @@ void main() {
       await zaiStorage(),
       (_) => api,
       _FakeResearch(),
+      _FakeWebSearch(),
     ).run(backPhoto: photo);
 
     expect(outcome, isA<AiMealScanDone>());
@@ -285,6 +299,7 @@ void main() {
       await zaiStorage(),
       (_) => api,
       _FakeResearch(),
+      _FakeWebSearch(),
     ).run(backPhoto: photo);
 
     expect(outcome, isA<AiMealScanDone>());
@@ -299,6 +314,152 @@ void main() {
           as Map<String, dynamic>,
       containsPair('required', ['vitaminB9100', 'choline100']),
     );
+  });
+
+  group('the web search of last resort', () {
+    // Both free databases empty is the store-brand case the step exists
+    // for. One search, one extraction call, and the web record joins the
+    // pipeline as a record like any other — its values tagged Web, below a
+    // database's and above the merge's estimate.
+    test('empty database research falls back to one web search', () async {
+      final api = _FakeToolApi([
+        {'productName': 'Skyr', 'brand': 'Milbona', 'nutrients': {}},
+        {
+          // The extraction: only what a result stated.
+          'nutrients': {'proteins100': 10},
+        },
+        {
+          // A complete merge, so no gap-fill reply is needed.
+          'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 5},
+        },
+      ]);
+      final web = _FakeWebSearch()
+        ..hits = [
+          const AiMealWebHit(
+            title: 'Milbona Skyr Nährwerte',
+            snippet: '100 g: 63 kcal, 10 g Eiweiß',
+            url: 'https://example.org/skyr',
+          ),
+        ];
+
+      final outcome = await AiMealScanUseCase(
+        await zaiStorage(),
+        (_) => api,
+        _FakeResearch(),
+        web,
+      ).run(backPhoto: photo);
+
+      // The search ran once, nutrition-worded, and the extraction call
+      // carries the hit and asks for stated values only.
+      expect(web.queries, ['Milbona Skyr nutrition']);
+      expect(api.calls[1].toolName, scanWebExtractToolName);
+      expect(api.calls[1].photos, 0);
+      expect(api.calls[1].userPrompt, contains('Milbona Skyr Nährwerte'));
+      // The web record rides into the merge as a record like any other.
+      expect(api.calls[2].toolName, mergeNutrientsToolName);
+      expect(api.calls[2].userPrompt, contains('"source":"Web search"'));
+      // Its values are tagged Web, not Database and not Estimated.
+      final result = (outcome as AiMealScanDone).result;
+      expect(result.nutrients['proteins100'], 5);
+      expect(result.sources['proteins100'], AiLabelValueSource.web);
+      expect(result.sources['iron100'], AiLabelValueSource.estimated);
+    });
+
+    test('a German scan searches German pages', () async {
+      final api = _FakeToolApi([
+        {'productName': 'Sky', 'nutrients': {}},
+        {
+          'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 1},
+        },
+      ]);
+      final web = _FakeWebSearch();
+
+      await AiMealScanUseCase(
+        await zaiStorage(),
+        (_) => api,
+        _FakeResearch(),
+        web,
+      ).run(backPhoto: photo, localeCode: 'de');
+
+      expect(web.queries, ['Sky Nährwerte']);
+    });
+
+    test('a web instance with nothing costs no model call', () async {
+      final api = _FakeToolApi([
+        {'productName': 'Skyr', 'nutrients': {}},
+        {
+          'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 1},
+        },
+      ]);
+      final web = _FakeWebSearch();
+
+      await AiMealScanUseCase(
+        await zaiStorage(),
+        (_) => api,
+        _FakeResearch(),
+        web,
+      ).run(backPhoto: photo);
+
+      expect(api.calls.map((c) => c.toolName), [
+        scanLabelToolName,
+        mergeNutrientsToolName,
+      ]);
+    });
+
+    test('a database answer skips the web entirely', () async {
+      final api = _FakeToolApi([
+        {'productName': 'Thunfisch', 'nutrients': {}},
+        {
+          'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 1},
+        },
+      ]);
+      final web = _FakeWebSearch();
+      final research = _FakeResearch()
+        ..nameRecords = [
+          const AiFoodRecord('Open Food Facts', 'Thunfisch Dose', {
+            'selenium100': 55,
+          }),
+        ];
+
+      await AiMealScanUseCase(
+        await zaiStorage(),
+        (_) => api,
+        research,
+        web,
+      ).run(backPhoto: photo);
+
+      // Below the web in trust and already answering: no search paid.
+      expect(web.queries, isEmpty);
+    });
+
+    test('an extraction that states nothing falls back to estimates', () async {
+      final api = _FakeToolApi([
+        {'productName': 'Skyr', 'nutrients': {}},
+        // Stated nothing — the expected outcome for most nutrients.
+        {'nutrients': {}},
+        {
+          'nutrients': {for (final key in aiScanNutrientUnits.keys) key: 1},
+        },
+      ]);
+      final web = _FakeWebSearch()
+        ..hits = [
+          const AiMealWebHit(
+            title: 'Unrelated',
+            snippet: 'nothing here',
+            url: 'https://example.org/x',
+          ),
+        ];
+
+      final outcome = await AiMealScanUseCase(
+        await zaiStorage(),
+        (_) => api,
+        _FakeResearch(),
+        web,
+      ).run(backPhoto: photo);
+
+      final result = (outcome as AiMealScanDone).result;
+      expect(result.sources['proteins100'], AiLabelValueSource.estimated);
+    });
   });
 }
 
@@ -363,6 +524,17 @@ class _ThrowingResearch implements AiMealResearch {
   @override
   Future<List<AiFoodRecord>> byName(String query) async {
     throw Exception('network down');
+  }
+}
+
+class _FakeWebSearch implements AiMealWebSearch {
+  final queries = <String>[];
+  List<AiMealWebHit> hits = const [];
+
+  @override
+  Future<List<AiMealWebHit>> search(String query) async {
+    queries.add(query);
+    return hits;
   }
 }
 

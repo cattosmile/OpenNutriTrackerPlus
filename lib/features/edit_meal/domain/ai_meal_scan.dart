@@ -3,10 +3,11 @@ import 'package:opennutritracker/core/utils/barcode_validator.dart';
 /// Where one nutrient value in a scan result came from.
 ///
 /// Ordered by trust: the label was measured by the manufacturer, a database
-/// record was measured by a food authority, and an estimate is the model's
-/// best knowledge. Shown per value on the review card so the user knows
-/// which numbers to double-check against the can in their hand.
-enum AiLabelValueSource { label, database, estimated }
+/// record was measured by a food authority, a web result was published by
+/// whoever published it, and an estimate is the model's best knowledge.
+/// Shown per value on the review card so the user knows which numbers to
+/// double-check against the can in their hand.
+enum AiLabelValueSource { label, database, web, estimated }
 
 /// Every nutrient the scan can fill, keyed by the `MealNutrimentsEntity`
 /// field name and valued with the unit the value is expected in.
@@ -247,6 +248,50 @@ when the food credibly contains none; otherwise give a plausible small
 amount. All values per 100 g/ml, in the unit each schema entry names.
 Decide each nutrient once — no deliberation, this call should be quick.''';
 
+const scanWebExtractToolName = 'read_web_search_results';
+
+const scanWebExtractToolDescription =
+    'Extract the per-100 g nutrient values web-search results actually state '
+    'for one packaged food.';
+
+/// The web step's absent policy, third of the three on purpose. The OCR
+/// step omits what the label did not print; the merge step must return
+/// everything; this step omits what no search result stated — a number the
+/// web did not print is worth nothing here, because the whole point of the
+/// step is stated values instead of the merge's estimates.
+const _webStatedAbsentPolicy =
+    'Omit when no result states the nutrient — never estimate it here.';
+
+Map<String, Object> get scanWebExtractToolSchema => <String, Object>{
+  'type': 'object',
+  'properties': {
+    'nutrients': {
+      'type': 'object',
+      'properties': _nutrientProperties(_webStatedAbsentPolicy),
+    },
+  },
+  'required': ['nutrients'],
+};
+
+const scanWebExtractSystemPrompt = '''
+You read web-search results about one packaged food so that values someone
+actually published can be transcribed into a nutrition tracker. You
+transcribe; you never estimate on this step.
+
+Rules:
+- Each result carries a title, a snippet and its URL. Snippets are short:
+  use exactly what a result states, and never infer a number none of them
+  printed.
+- Per-100 g / per-100 ml values only. Skip per-serving and per-package
+  numbers unless the result also states the serving or package size the
+  conversion needs.
+- Express each nutrient in the unit its schema entry names, converting when
+  a result prints another (g vs mg vs µg; kJ to kcal with 1 kcal = 4.184
+  kJ).
+- Include a nutrient only when a result states it. Omitting most nutrients
+  is the expected outcome, not a failed answer — a later step fills gaps.
+- Ignore results about a different product than the one named.''';
+
 /// A number a model handed back, or null when it is not one worth keeping.
 ///
 /// Lenient on purpose — models emit ints for whole numbers and occasionally
@@ -263,7 +308,11 @@ double? aiScanNumber(Object? raw) {
   return value;
 }
 
-Map<String, double> _nutrientsFrom(Object? raw) {
+/// The nutrients out of a tool reply, dropping every key the scan does not
+/// know and every value [aiScanNumber] refuses — the same enforcement for
+/// all three steps that answer nutrients: OCR, merge/gap-fill and the web
+/// extraction between them.
+Map<String, double> aiScanNutrientsFrom(Object? raw) {
   if (raw is! Map) return const {};
   return {
     for (final entry in raw.entries)
@@ -306,7 +355,7 @@ class AiLabelData {
       isDrink: raw['isDrink'] == true,
       packageSizeGrams: aiScanNumber(raw['packageSizeGrams']),
       servingSizeGrams: aiScanNumber(raw['servingSizeGrams']),
-      nutrients: _nutrientsFrom(raw['nutrients']),
+      nutrients: aiScanNutrientsFrom(raw['nutrients']),
     );
   }
 }
@@ -332,7 +381,7 @@ class AiMergedNutrients {
 
   factory AiMergedNutrients.fromToolArguments(Map<String, dynamic> raw) =>
       AiMergedNutrients(
-        nutrients: _nutrientsFrom(raw['nutrients']),
+        nutrients: aiScanNutrientsFrom(raw['nutrients']),
         matchedFoodName: _nonEmptyString(raw['matchedFoodName']),
       );
 }
@@ -375,7 +424,9 @@ class AiMealScanResult {
   });
 
   /// Label value verbatim, else the merged value; source tagged from what
-  /// each side actually contained.
+  /// each side actually contained. A web value sits below a database one —
+  /// a food authority measured the one, somebody's shop page published the
+  /// other — and above the merge's own estimate.
   ///
   /// A label value is kept as read even when the merge returned a
   /// different number, because "the model preferred its own idea over the
@@ -383,6 +434,7 @@ class AiMealScanResult {
   static AiMealScanResult build({
     required AiLabelData label,
     required Map<String, double> databaseNutrients,
+    required Map<String, double> webNutrients,
     required AiMergedNutrients merged,
     double? userPortionGrams,
   }) {
@@ -398,6 +450,8 @@ class AiMealScanResult {
         value = fromMerge;
         source = databaseNutrients.containsKey(key)
             ? AiLabelValueSource.database
+            : webNutrients.containsKey(key)
+            ? AiLabelValueSource.web
             : AiLabelValueSource.estimated;
       } else if (databaseNutrients[key] case final fromRecords?) {
         // The merge omitted a key a record measured. Its own precedence
@@ -407,6 +461,9 @@ class AiMealScanResult {
         // an empty field next to numbers a record actually measured.
         value = fromRecords;
         source = AiLabelValueSource.database;
+      } else if (webNutrients[key] case final fromWeb?) {
+        value = fromWeb;
+        source = AiLabelValueSource.web;
       } else {
         continue;
       }

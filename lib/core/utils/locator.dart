@@ -76,6 +76,7 @@ import 'package:opennutritracker/core/utils/env.dart';
 import 'package:http/http.dart' as http;
 import 'package:opennutritracker/core/utils/ai_credential_storage.dart';
 import 'package:opennutritracker/features/add_meal/data/meal_items_api_factory.dart';
+import 'package:opennutritracker/features/edit_meal/data/searxng_web_search.dart';
 import 'package:opennutritracker/features/edit_meal/domain/usecase/ai_meal_scan_usecase.dart';
 import 'package:opennutritracker/features/add_meal/data/model_meal_photo_interpreter.dart';
 import 'package:opennutritracker/features/add_meal/data/model_meal_text_interpreter.dart';
@@ -553,12 +554,18 @@ Future<void> initLocator() async {
   );
   // Label scan: reads the active AI selection per call (same reason as the
   // two use cases above) and researches through the products repository
-  // the search tab already uses.
+  // the search tab already uses. The web-search last resort reads its
+  // destination per call too, for the same reason — the user can point it
+  // at another instance while the app runs.
+  locator.registerLazySingleton<AiMealWebSearch>(
+    () => SearxngWebSearch(locator(), locator<AiCredentialStorage>()),
+  );
   locator.registerLazySingleton<AiMealScanUseCase>(
     () => AiMealScanUseCase(
       locator<AiCredentialStorage>(),
       (selection) => structuredToolApiFor(locator(), selection),
       ProductsRepositoryAiMealResearch(locator<ProductsRepository>()),
+      locator<AiMealWebSearch>(),
     ),
   );
   locator.registerLazySingleton<UserActivityRepository>(

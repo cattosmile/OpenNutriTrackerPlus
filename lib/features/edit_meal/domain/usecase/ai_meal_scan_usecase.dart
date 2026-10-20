@@ -45,14 +45,48 @@ class AiFoodRecord {
 /// An interface so the pipeline is testable against canned records, and so
 /// the sources stay swappable: today Open Food Facts (free, keyless, the
 /// corpus strongest on EU packaged goods) plus the project's own Supabase
-/// mirror of USDA FDC and the German BLS. That pair *is* the "search the
-/// internet for the product" step — chosen over a scraping or web-search
-/// API because both databases are already wired into the app, cost nothing,
-/// and answer in structured per-100 g numbers rather than prose a second
-/// model would have to re-read.
+/// mirror of USDA FDC and the German BLS. Both answer in structured
+/// per-100 g numbers rather than prose a second model would have to
+/// re-read — and both are free, which is what a research step bolted onto
+/// an optional feature has to be.
 abstract interface class AiMealResearch {
   Future<List<AiFoodRecord>> byBarcode(String barcode);
   Future<List<AiFoodRecord>> byName(String query);
+}
+
+/// One result the web-search fallback found: what its title and snippet
+/// said, and where it was published.
+class AiMealWebHit {
+  final String title;
+  final String snippet;
+  final String url;
+
+  const AiMealWebHit({
+    required this.title,
+    required this.snippet,
+    required this.url,
+  });
+}
+
+/// The web-search half of a scan's research, as the use case sees it.
+///
+/// An interface for the same two reasons [AiMealResearch] is one: canned
+/// results in tests, and a source that stays swappable. The implementation
+/// the app ships asks a SearXNG instance **the user runs** — no key of the
+/// app's, no vendor's metered quota, and no dependence on a credential for
+/// a provider the user never chose, which is the trap every hosted
+/// web-search API measured here falls into: Gemini's grounding answers
+/// 429 on a free key before thinking, and Z.ai's `web_search` tool needs
+/// the Z.ai key whatever model the scan is otherwise using.
+///
+/// The search returns raw results; the extraction into numbers is a call
+/// on the scan's own model, so this step stays provider-neutral end to end.
+abstract interface class AiMealWebSearch {
+  /// Hits for [query], or empty when no instance is configured, none
+  /// answered, or nothing came back. Never throws: research is an
+  /// enhancement, and a network that cannot reach the instance still gets
+  /// a scan whose gaps the merge step estimates.
+  Future<List<AiMealWebHit>> search(String query);
 }
 
 /// Where a scan currently is, for the progress surface. The research step
@@ -72,7 +106,10 @@ enum AiMealScanPhase { reading, researching, completing }
 /// 2. **Research** — no model involved. The barcode and the name the OCR
 ///    read are looked up in Open Food Facts and the Supabase food backend,
 ///    free of charge, through the same [ProductsRepository] the search tab
-///    uses.
+///    uses. When both answer nothing and the user runs a SearXNG instance,
+///    one web search runs through it and the scan's own model extracts the
+///    values the results state ([_webRecord]) — provider-neutral, and the
+///    only part of a scan that touches the open web.
 /// 3. **Merge** — a text-only call that receives the label JSON, the
 ///    database records and the user's hints, and fills every nutrient by
 ///    the precedence in its prompt. A **gap-fill** call follows only when
@@ -93,8 +130,14 @@ class AiMealScanUseCase {
   final AiCredentialStorage _credentials;
   final StructuredToolApi Function(AiSelection selection) _apiFactory;
   final AiMealResearch _research;
+  final AiMealWebSearch _webSearch;
 
-  AiMealScanUseCase(this._credentials, this._apiFactory, this._research);
+  AiMealScanUseCase(
+    this._credentials,
+    this._apiFactory,
+    this._research,
+    this._webSearch,
+  );
 
   Future<AiMealScanOutcome> run({
     required MealPhoto backPhoto,
@@ -138,11 +181,32 @@ class AiMealScanUseCase {
         typedProductName: productName,
       );
       onPhase?.call(AiMealScanPhase.researching);
+      // The last resort. Both free databases empty is the store-brand case
+      // this step exists for, and it runs only then — a web result sits
+      // below a database record in trust, so paying its latency when a
+      // record already answered would buy nothing.
+      if (records.isEmpty) {
+        final webRecord = await _webRecord(
+          api: api,
+          label: label,
+          typedBrand: brand,
+          typedProductName: productName,
+          localeCode: localeCode,
+        );
+        if (webRecord != null) records.add(webRecord);
+      }
       final databaseNutrients = <String, double>{};
+      final webNutrients = <String, double>{};
       for (final record in records) {
-        databaseNutrients.addEntries(
+        // The web record carries its own label, so the source tags below
+        // can tell a food authority's number from a shop page's — the same
+        // split this loop already does between label and merge.
+        final target = record.sourceLabel == webSearchSourceLabel
+            ? webNutrients
+            : databaseNutrients;
+        target.addEntries(
           record.nutrients.entries.where(
-            (entry) => !databaseNutrients.containsKey(entry.key),
+            (entry) => !target.containsKey(entry.key),
           ),
         );
       }
@@ -234,6 +298,7 @@ class AiMealScanUseCase {
         AiMealScanResult.build(
           label: label,
           databaseNutrients: databaseNutrients,
+          webNutrients: webNutrients,
           merged: merged,
           userPortionGrams: userPortion,
         ),
@@ -268,17 +333,11 @@ class AiMealScanUseCase {
         _log.info('Barcode research failed', e, stackTrace);
       }
     }
-    // A typed product name outranks the OCR's reading of it — the user
-    // bought the thing and is looking at the can while typing.
-    final productName = typedProductName.trim().isNotEmpty
-        ? typedProductName.trim()
-        : label.productName;
-    final query = [
-      ?label.brand,
-      if (label.brand == null && typedBrand.trim().isNotEmpty)
-        typedBrand.trim(),
-      ?productName,
-    ].join(' ').trim();
+    final query = _researchQuery(
+      label: label,
+      typedBrand: typedBrand,
+      typedProductName: typedProductName,
+    );
     if (query.isEmpty) return records;
     try {
       records.addAll(await _research.byName(query));
@@ -286,6 +345,87 @@ class AiMealScanUseCase {
       _log.info('Name research failed', e, stackTrace);
     }
     return records;
+  }
+
+  /// The product identity every research path searches with: brand first,
+  /// then the name — and a typed product name outranks the OCR's reading of
+  /// it, because the user bought the thing and is looking at the can while
+  /// typing.
+  String _researchQuery({
+    required AiLabelData label,
+    required String typedBrand,
+    required String typedProductName,
+  }) {
+    final productName = typedProductName.trim().isNotEmpty
+        ? typedProductName.trim()
+        : label.productName;
+    return [
+      ?label.brand,
+      if (label.brand == null && typedBrand.trim().isNotEmpty)
+        typedBrand.trim(),
+      ?productName,
+    ].join(' ').trim();
+  }
+
+  /// The label every web-sourced record carries — and how the record split
+  /// above recognises its own record.
+  static const webSearchSourceLabel = 'Web search';
+
+  /// One web lookup, one extraction call over what it found.
+  ///
+  /// The search itself never throws ([AiMealWebSearch]); the extraction is
+  /// a model call and can, so it is caught here — the web step is an
+  /// enhancement stacked on an enhancement, and losing it must cost a scan
+  /// nothing. A null record (nothing configured, nothing found, nothing
+  /// stated) drops the scan straight back onto the merge's estimates.
+  Future<AiFoodRecord?> _webRecord({
+    required StructuredToolApi api,
+    required AiLabelData label,
+    required String typedBrand,
+    required String typedProductName,
+    required String? localeCode,
+  }) async {
+    final query = _researchQuery(
+      label: label,
+      typedBrand: typedBrand,
+      typedProductName: typedProductName,
+    );
+    if (query.isEmpty) return null;
+    // The nutrition word keeps results on nutrition pages rather than the
+    // brand's marketing, in the language the user scans under — a German
+    // product answers to German pages, and the word is the only locale
+    // hint this sends. A `language` parameter was tried and dropped: it
+    // made the instance's bing engine answer zero results for a query the
+    // same engine answered well without it.
+    final nutritionWord = localeCode == 'de' ? 'Nährwerte' : 'nutrition';
+    final hits = await _webSearch.search('$query $nutritionWord');
+    if (hits.isEmpty) return null;
+    try {
+      final extracted = aiScanNutrientsFrom(
+        (await api.requestToolJson(
+          system: localeCode == null
+              ? scanWebExtractSystemPrompt
+              : '$scanWebExtractSystemPrompt\nThe user\'s app language is '
+                    '"$localeCode".',
+          userPrompt: jsonEncode({
+            'product': {'name': label.productName, 'brand': label.brand},
+            'results': [
+              for (final hit in hits)
+                {'title': hit.title, 'snippet': hit.snippet, 'url': hit.url},
+            ],
+          }),
+          photos: const [],
+          toolName: scanWebExtractToolName,
+          toolDescription: scanWebExtractToolDescription,
+          toolSchema: scanWebExtractToolSchema,
+        ))['nutrients'],
+      );
+      if (extracted.isEmpty) return null;
+      return AiFoodRecord(webSearchSourceLabel, query, extracted);
+    } catch (e, stackTrace) {
+      _log.info('Web research failed', e, stackTrace);
+      return null;
+    }
   }
 }
 

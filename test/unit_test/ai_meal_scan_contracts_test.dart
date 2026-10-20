@@ -97,6 +97,7 @@ void main() {
       final result = AiMealScanResult.build(
         label: label,
         databaseNutrients: const {},
+        webNutrients: const {},
         merged: merged,
       );
       expect(result.nutrients['energyKcal100'], 116);
@@ -107,6 +108,7 @@ void main() {
       final result = AiMealScanResult.build(
         label: label,
         databaseNutrients: const {'selenium100': 55},
+        webNutrients: const {},
         merged: merged,
       );
       expect(result.nutrients['selenium100'], 60);
@@ -117,6 +119,7 @@ void main() {
       final result = AiMealScanResult.build(
         label: label,
         databaseNutrients: const {},
+        webNutrients: const {},
         merged: merged,
       );
       expect(result.sources['iodine100'], AiLabelValueSource.estimated);
@@ -131,16 +134,34 @@ void main() {
       final result = AiMealScanResult.build(
         label: label,
         databaseNutrients: const {'chromium100': 2},
+        webNutrients: const {},
         merged: merged,
       );
       expect(result.nutrients['chromium100'], 2);
       expect(result.sources['chromium100'], AiLabelValueSource.database);
     });
 
+    test('a web value tags Web, and a database key outranks the web', () {
+      final result = AiMealScanResult.build(
+        label: label,
+        databaseNutrients: const {'selenium100': 55},
+        webNutrients: const {'selenium100': 99, 'iodine100': 25},
+        merged: merged,
+      );
+      // The web held selenium too — a food authority outranks a shop page,
+      // so the tag is database, never web, for a key both measured.
+      expect(result.sources['selenium100'], AiLabelValueSource.database);
+      // And where only the web stated a value, the merged number keeps it
+      // from being read as the model's own estimate.
+      expect(result.sources['iodine100'], AiLabelValueSource.web);
+      expect(result.nutrients['iodine100'], 25);
+    });
+
     test('the user\'s typed portion is carried through untouched', () {
       final result = AiMealScanResult.build(
         label: label,
         databaseNutrients: const {},
+        webNutrients: const {},
         merged: merged,
         userPortionGrams: 92.5,
       );
