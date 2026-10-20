@@ -83,7 +83,18 @@ void main() {
     'aiScanSourceLabelLabel',
     'aiScanSourceDatabaseLabel',
     'aiScanSourceEstimatedLabel',
+    // Not `aiScanSourceWebLabel`: "Web" is the same word in German — a true
+    // cognate like kcal or Barcode, which this check cannot distinguish
+    // from pasted English.
     'aiScanBasedOnLabel',
+    // The web-search fallback's settings section: the reachable and
+    // unreachable sentences must stay distinct (a 403 is the JSON-disabled
+    // misconfiguration and the message names it), and the help paragraph is
+    // the only place the JSON-format requirement is stated.
+    'aiAssistSearxngLabel',
+    'aiAssistSearxngHelp',
+    'aiAssistSearxngReachableLabel',
+    'aiAssistSearxngUnreachableLabel',
   ];
   final arb = {
     for (final locale in locales)

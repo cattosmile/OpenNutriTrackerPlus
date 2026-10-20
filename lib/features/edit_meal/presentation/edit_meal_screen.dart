@@ -26,6 +26,7 @@ import 'package:opennutritracker/core/utils/locator.dart';
 import 'package:opennutritracker/core/utils/navigation_options.dart';
 import 'package:opennutritracker/core/utils/navigation_predicates.dart';
 import 'package:opennutritracker/features/add_meal/domain/entity/meal_entity.dart';
+import 'package:opennutritracker/features/add_meal/domain/meal_photo_interpreter.dart';
 import 'package:opennutritracker/features/edit_meal/domain/ai_meal_scan.dart';
 import 'package:opennutritracker/features/edit_meal/presentation/bloc/edit_meal_bloc.dart';
 import 'package:opennutritracker/features/edit_meal/presentation/micro_field_specs.dart';
@@ -990,11 +991,12 @@ class _EditMealScreenState extends State<EditMealScreen> {
   /// Opens the AI label scan and, when it returns a result, drops it into
   /// the form for the user to review and edit before saving.
   Future<void> _openAiScan() async {
-    final result = await Navigator.of(context).push<AiMealScanResult>(
+    final scanned = await Navigator.of(context).push<AiMealScanPayload>(
       MaterialPageRoute(builder: (_) => const AiMealScanScreen()),
     );
-    if (!mounted || result == null) return;
-    _applyAiScanResult(result);
+    if (!mounted || scanned == null) return;
+    _applyAiScanResult(scanned.result);
+    await _applyAiScanFrontPhoto(scanned.frontPhoto);
   }
 
   /// Prefills the form from a scan. Values are per-100 in metric, which is
@@ -1056,6 +1058,44 @@ class _EditMealScreenState extends State<EditMealScreen> {
       }
     });
     unawaited(_editMealBloc.setFormMode(CustomMealFormMode.advanced));
+  }
+
+  /// Saves the scan's front photo as the meal's photo — it is the same
+  /// picture the model just read, so picking it again by hand would only
+  /// redo that. The bytes already carry the app's photo encoding (quality
+  /// 80, ≤1024 px, no metadata); the temp file exists because
+  /// [UserImageStorage.importFrom] takes a path, and its WebP pipeline is
+  /// the one every hand-picked photo goes through.
+  Future<void> _applyAiScanFrontPhoto(MealPhoto? photo) async {
+    final ownerId = _mealEntity.code;
+    if (photo == null || ownerId == null) return;
+    final temp = File('${Directory.systemTemp.path}/ai_scan_$ownerId.tmp');
+    try {
+      await temp.writeAsBytes(photo.bytes, flush: true);
+      final relative = await UserImageStorage.importFrom(
+        kind: UserImageKind.meal,
+        ownerId: ownerId,
+        sourcePath: temp.path,
+      );
+      // Bust the in-memory Image.file cache so the new picture shows up
+      // immediately instead of redrawing previous bytes for this path.
+      FileImage(File(await UserImageStorage.absolutePath(relative))).evict();
+      if (!mounted) return;
+      setState(() {
+        _localImagePath = relative;
+        _localImageCleared = false;
+      });
+    } catch (e, st) {
+      // A photo that fails to persist must not cost the user the prefilled
+      // form — worst case the meal saves with the default image.
+      log.warning('Failed to reuse the scan photo as the meal photo', e, st);
+    } finally {
+      try {
+        if (await temp.exists()) await temp.delete();
+      } catch (_) {
+        // Best effort; the OS clears the cache directory anyway.
+      }
+    }
   }
 
   /// Push a lightweight `MobileScanner` page that returns the first product

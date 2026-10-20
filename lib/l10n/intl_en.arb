@@ -1462,6 +1462,7 @@
   "aiAssistDisclosureOpenRouter": "With a key saved, the text you type on the multi-item add screen — and any photo you choose to read there — is sent to OpenRouter, which forwards it to the provider serving your chosen model. OpenRouter also forwards an account-level identity to that provider on every request, and this cannot be switched off. It does not keep your content beyond routing the request, except as required for abuse detection, security, billing or legal compliance. The vendor serving your model keeps what it receives under its own policy.",
   "aiAssistDisclosureOpenAI": "With a key saved, the text you type on the multi-item add screen — and any photo you choose to read there — is sent to OpenAI. OpenAI keeps what you send for up to 30 days to monitor for abuse, and longer if the law requires it or it is reasonably necessary to protect its services or a third party from harm.",
   "aiAssistDisclosureZai": "With a key saved, the text you type on the multi-item add screen — and any photo you choose to read there — is sent to Z.ai, which processes it under its own policy. Requests are billed to your GLM Coding Plan, not pay-as-you-go credit.",
+  "aiAssistDisclosureGoogle": "With a key saved, the text you type on the multi-item add screen — and any photo you choose to read there — is sent to Google’s Gemini API, which processes it under its own policy. Requests count against the API’s free daily quota; a Google AI subscription does not raise it. On the free tier, Google may use what is sent to improve its products.",
   "aiAssistProviderOwnServerLabel": "Your own server",
   "aiAssistEndpointFieldLabel": "Server address",
   "aiAssistModelFieldLabel": "Model name",
@@ -1485,6 +1486,15 @@
   "aiAssistEndpointInvalidLabel": "Enter an address starting with http:// or https://",
   "aiAssistModelRequiredLabel": "Name the model this server should use.",
   "aiAssistEndpointPublicPlaintextLabel": "That address is public and unencrypted, so requests to it are refused. Use https, or a private address.",
+  "aiAssistSearxngLabel": "Web search (SearXNG)",
+  "aiAssistSearxngUrlLabel": "SearXNG address",
+  "aiAssistSearxngTokenLabel": "Access token (optional)",
+  "aiAssistSearxngTokenSavedLabel": "Token saved",
+  "aiAssistSearxngCheckLabel": "Check",
+  "aiAssistSearxngReachableLabel": "Reachable — it answers JSON searches.",
+  "aiAssistSearxngUnreachableLabel": "Not reachable. Is the server up, and does it allow the JSON format?",
+  "aiAssistSearxngInvalidUrlLabel": "Enter an address starting with http:// or https://",
+  "aiAssistSearxngHelp": "When both food databases have nothing for a scanned product, one web search runs through your own SearXNG instance and the model takes the values its results actually state. The instance must allow the JSON format. Product queries go to your instance, which forwards them to search engines.",
   "aiAssistProbeSectionLabel": "Setup check",
   "aiAssistProbeRunningLabel": "Checking this server. The two checks run one after the other, so allow up to {minutes, plural, one{a minute} other{{minutes} minutes}} — you can close this, and the answer will be here when you come back.",
   "@aiAssistProbeRunningLabel": {
@@ -1583,6 +1593,7 @@
   },
   "bulkAddPhotoDisclosureOpenAI": "The photo is sent to OpenAI to identify the foods in it. OpenAI keeps it for up to 30 days to monitor for abuse, and longer if the law requires it or it is reasonably necessary to protect its services or a third party from harm.",
   "bulkAddPhotoDisclosureZai": "The photo is sent to Z.ai to identify the foods in it.",
+  "bulkAddPhotoDisclosureGoogle": "The photo is sent to Google’s Gemini API to identify the foods in it. On the free tier, Google may use it to improve its products.",
   "bulkAddPhotoDisclosureOwnServer": "The photo is sent to {host} to identify the foods in it.",
   "@bulkAddPhotoDisclosureOwnServer": {
     "placeholders": {
@@ -1712,6 +1723,7 @@
   "aiScanFailedLabel": "Couldn't read the label. Check your connection and try again.",
   "aiScanResultTitle": "Check the values",
   "aiScanSourceLabelLabel": "Label",
+  "aiScanSourceWebLabel": "Web",
   "aiScanSourceDatabaseLabel": "Database",
   "aiScanSourceEstimatedLabel": "Estimated",
   "aiScanBasedOnLabel": "Leaned on {name}",
@@ -1735,6 +1747,7 @@
   },
   "aiScanDisclosureOpenAI": "The photos are sent to OpenAI to read the nutrition label. OpenAI keeps them for up to 30 days to monitor for abuse, and longer if the law requires it or it is reasonably necessary to protect its services or a third party from harm.",
   "aiScanDisclosureZai": "The photos are sent to Z.ai to read the nutrition label.",
+  "aiScanDisclosureGoogle": "The photos are sent to Google’s Gemini API to read the nutrition label. On the free tier, Google may use them to improve its products.",
   "aiScanDisclosureOwnServer": "The photos are sent to {host} to read the nutrition label.",
   "@aiScanDisclosureOwnServer": {
     "placeholders": {

@@ -281,7 +281,21 @@ Three steps, in [`ai_meal_scan_usecase.dart`](../lib/features/edit_meal/domain/u
    same `ProductsRepository` the search tab uses. Free, keyless for OFF, and structured
    per-100 g — which is why this pair was chosen over a scraping or web-search API: both
    databases are already wired into the app and answer in numbers rather than in prose a second
-   model would have to re-read.
+   model would have to re-read. Hosted web-search routes were measured (2026-10-20) and
+   rejected — Gemini's search grounding answers 429 on a free-tier key before thinking, and
+   Z.ai's `web_search` tool needs a Z.ai credential — because a scan whose research depends on
+   a key for a provider the user never chose is a hidden second subscription, not a feature.
+   What shipped instead is the keyless version of the same idea: when **both** databases answer
+   nothing, the scan asks a **SearXNG instance the user runs**
+   ([`searxng_web_search.dart`](../lib/features/edit_meal/data/searxng_web_search.dart),
+   configured in the AI settings dialog) and the scan's own model extracts the values the
+   results actually state — one search, one extraction call, provider-neutral end to end. The
+   web record joins the pipeline as a record like any other and its values are tagged *Web*,
+   below a database's and above an estimate. A product nothing found stays what it has always
+   been: values estimated by the merge step and tagged *Estimated*. Hosting one's own instance
+   is a `docker run searxng/searxng` with a two-line `settings.yml` — enable the JSON format
+   (`search: formats: [html, json]`) or every request answers 403; keep the port private or
+   put a reverse proxy in front of it and put that proxy's token in the dialog's token field.
 3. **Complete.** A text-only second call receives the label values, the database records and the
    user's hints, and fills every nutrient by precedence: label values verbatim, then a close
    database record, then estimation from food-composition knowledge. Two details keep that call
@@ -405,17 +419,18 @@ the app on OpenRouter's public leaderboard, and saving a key is not consent to b
 
 ## Choosing a provider
 
-Five providers, differing along two axes that do not line up:
+Six providers, differing along two axes that do not line up:
 
 | | Reached | Credential | Model |
 |---|---|---|---|
 | **Anthropic** | directly | API key | curated list |
 | **OpenAI** | directly | API key | curated list |
 | **Z.ai** | directly, coding-plan endpoint | API key | curated list |
+| **Google** | directly, AI Studio compatibility endpoint | API key | curated list |
 | **OpenRouter** | via a broker, then a vendor | API key | curated list, each vendor-pinned |
 | **A server you run** | directly, at your address | address; key optional | whatever the server offers |
 
-The odd one out is the fifth, and it is odd in a way that reached deep into the code: its
+The odd one out is the last, and it is odd in a way that reached deep into the code: its
 credential is an **address**, not a key, and a key is optional. Everything that had previously
 treated *"has a key"* as the test of whether the feature is usable had to learn a broader
 question.
@@ -457,14 +472,32 @@ server you run gets 120. That is not a guess: a real Ollama on an M4 Mac mini se
 was measured at 22–24 seconds from cold and 8–17 warm, and Ollama unloads after five idle minutes
 by default — so *"the first request of the meal"* is the ordinary case, not an edge one. The
 margin is generous because the measurement came from the fast end of the hardware range this
-provider exists to serve. Z.ai sits between at 60: its GLM models reason before answering, and
-the trace counts against the same token budget as the tool call, so a 20-second ceiling tuned
-for models that reply immediately would report working requests as failures.
+provider exists to serve. The reasoning providers sit above the hosted three for the same
+measured reason — the trace counts against the same token budget as the tool call, so a 20-second
+ceiling tuned for models that reply immediately would report working requests as failures. Z.ai
+gets 150: a two-photo label scan at effort `high` measured 19 s, 25 s, 25 s and 45 s across four
+runs on one evening, purely from queue load, and a ceiling has to clear the outlier, not the
+average. Google gets 90: the full scan measured 13–19 s on `gemini-3.5-flash-lite`, and the
+ceiling exists for `gemini-3.8-flash` at effort `high`, whose time-to-first-token alone measured
+~22 s.
 
 **Z.ai is also the one destination whose URL is a billing decision.** The coding-plan endpoint
 (`api.z.ai/api/coding/paas/v4`) is where a GLM Coding Plan's quota applies; the self-served
 equivalent spends pay-as-you-go credit. The endpoint is compiled in precisely so that choice
 cannot be made accidentally.
+
+**Google's reasoning levels are the one set that overlaps Z.ai's without matching it.** Both
+providers take a `reasoning_effort`, but Z.ai accepts `low` / `high` / `max` and Gemini accepts
+`low` / `medium` / `high` — a level the destination rejects fails the whole request, so the
+effort picker offers per-provider levels and the factory falls back to the provider's default
+(`high` for Z.ai, `medium` for Google) when the stored one does not fit. The two also disagree on
+the wire: Z.ai pairs the effort with a `thinking` toggle Gemini's compatibility layer rejects
+outright, so that field is sent to Z.ai alone. Upstream excludes Google on policy grounds (a
+distribution test, and a training clause that covers free-tier submissions); this fork adds it
+anyway at its user's explicit request, and the disclosure names the free-tier training clause so
+the choice is an informed one. A Google AI subscription changes nothing here — the raised limits
+apply inside the AI Studio web app only, and a key used from an app answers on the free tier's
+daily request budget whatever subscription sits behind the account.
 
 ## A server you run: the probe
 
@@ -630,6 +663,7 @@ address**. An IPv4-only check would never have seen where the connection actuall
 | [`structured_tool_api.dart`](../lib/features/add_meal/domain/structured_tool_api.dart) | The second seam: one forced tool call whose schema the caller defines |
 | [`ai_meal_scan.dart`](../lib/features/edit_meal/domain/ai_meal_scan.dart) | Label and merge schemas, prompts, Dart-side parsers, the source-tagged result |
 | [`ai_meal_scan_usecase.dart`](../lib/features/edit_meal/domain/usecase/ai_meal_scan_usecase.dart) | OCR → free database research → merge, and the research adapter over `ProductsRepository` |
+| [`searxng_web_search.dart`](../lib/features/edit_meal/data/searxng_web_search.dart) | The keyless web-search last resort: one JSON query to the user's own SearXNG instance |
 | [`ai_meal_scan_screen.dart`](../lib/features/edit_meal/presentation/screens/ai_meal_scan_screen.dart) | Photo pick with disclosure, hints, the review card, applying to the form |
 
 ---

@@ -345,6 +345,60 @@ void main() {
     });
   });
 
+  group('the SearXNG pair', () {
+    // Feature-global rather than per provider: the web step runs whichever
+    // model answers, so its destination belongs to no provider slot.
+    test('round-trips a resolved base address', () async {
+      await storage.writeSearxngUrl('https://searx.example.org/search?q=x');
+
+      expect(
+        await storage.readSearxngUrl(),
+        Uri.parse('https://searx.example.org'),
+      );
+      // The pasted search path and query are gone from what is stored.
+      expect(backing.store['AiSearxngUrlTag'], 'https://searx.example.org');
+    });
+
+    test('refuses an address it cannot request', () async {
+      expect(await storage.writeSearxngUrl('searx.example.org'), isFalse);
+      expect(await storage.writeSearxngUrl('ftp://example.org'), isFalse);
+      expect(await storage.readSearxngUrl(), isNull);
+    });
+
+    test('a blank address clears the token with it', () async {
+      await storage.writeSearxngUrl('http://127.0.0.1:8888');
+      await storage.writeSearxngToken('proxy-secret');
+
+      await storage.writeSearxngUrl('');
+
+      expect(await storage.readSearxngUrl(), isNull);
+      expect(await storage.readSearxngToken(), isNull);
+    });
+
+    test('clearing one provider keeps the web search configured', () async {
+      await storage.setActiveProvider(AiProvider.anthropic);
+      await storage.writeApiKey('sk-ant');
+      await storage.writeSearxngUrl('http://127.0.0.1:8888');
+
+      await storage.clear(provider: AiProvider.anthropic);
+
+      expect(
+        await storage.readSearxngUrl(),
+        Uri.parse('http://127.0.0.1:8888'),
+      );
+    });
+
+    test('resolveSearxngUrl keeps a sub-path deployable base intact', () {
+      // A base under a reverse proxy's sub-path is a real deployment, and
+      // appending /search has to land after the prefix, not replace it.
+      expect(
+        AiCredentialStorage.resolveSearxngUrl('https://example.org/searxng/'),
+        Uri.parse('https://example.org/searxng'),
+      );
+      expect(AiCredentialStorage.resolveSearxngUrl('not a url at all'), isNull);
+    });
+  });
+
   group('clearAll', () {
     /// Every tag this class can ever write, for every provider, seeded
     /// directly rather than through the write path — a store that was only
@@ -353,6 +407,8 @@ void main() {
       backing.store['AiApiKeyTag'] = 'sk-legacy';
       backing.store['AiProviderTag'] = 'openrouter';
       backing.store['AiAssistEnabledTag'] = 'true';
+      backing.store['AiSearxngUrlTag'] = 'http://127.0.0.1:8888';
+      backing.store['AiSearxngTokenTag'] = 'proxy-secret';
       for (final provider in AiProvider.values) {
         backing.store['AiApiKeyTag.${provider.name}'] = 'sk-${provider.name}';
         backing.store['AiEndpointTag.${provider.name}'] = 'http://host/v1';
@@ -1797,6 +1853,64 @@ void main() {
       await storage.clear(provider: AiProvider.ownServer);
 
       expect(await storage.hasAcceptedTerms(), isFalse);
+    });
+  });
+
+  group('the reasoning effort', () {
+    // The levels a destination rejects fail the whole request, so the set
+    // offered is API surface, not preference: Z.ai has no `medium`, Gemini
+    // no `max`. The head of each list is the default the factory falls back
+    // to when nothing (or something invalid) is stored.
+    test('each reasoning provider gets its own set, headed by its default', () {
+      expect(
+        AiReasoningEffort.forProvider(AiProvider.zai).first,
+        AiReasoningEffort.high,
+      );
+      expect(
+        AiReasoningEffort.forProvider(AiProvider.zai),
+        isNot(contains(AiReasoningEffort.medium)),
+      );
+      expect(
+        AiReasoningEffort.forProvider(AiProvider.google).first,
+        AiReasoningEffort.medium,
+      );
+      expect(
+        AiReasoningEffort.forProvider(AiProvider.google),
+        isNot(contains(AiReasoningEffort.max)),
+      );
+      for (final provider in AiProvider.values) {
+        final levels = AiReasoningEffort.forProvider(provider);
+        expect(
+          levels.toSet().length,
+          levels.length,
+          reason: '${provider.name} repeats a level',
+        );
+      }
+    });
+
+    test('round-trips per provider, so the slots do not bleed', () async {
+      await storage.writeThinkingLevel(
+        AiReasoningEffort.medium,
+        provider: AiProvider.google,
+      );
+      await storage.writeThinkingLevel(
+        AiReasoningEffort.max,
+        provider: AiProvider.zai,
+      );
+
+      expect(
+        await storage.readThinkingLevel(provider: AiProvider.google),
+        AiReasoningEffort.medium,
+      );
+      expect(
+        await storage.readThinkingLevel(provider: AiProvider.zai),
+        AiReasoningEffort.max,
+      );
+      expect(
+        await storage.readThinkingLevel(provider: AiProvider.openai),
+        isNull,
+        reason: 'a provider without levels has no default written either',
+      );
     });
   });
 }

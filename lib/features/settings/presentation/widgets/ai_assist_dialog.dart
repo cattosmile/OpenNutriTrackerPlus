@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:opennutritracker/core/presentation/ai_assist_summary.dart';
 import 'package:opennutritracker/core/utils/ai_credential_storage.dart';
 import 'package:opennutritracker/core/utils/ai_model_catalogue.dart';
@@ -9,6 +10,7 @@ import 'package:opennutritracker/core/utils/ai_model_list_api.dart';
 import 'package:opennutritracker/core/utils/plaintext_destination_guard.dart';
 import 'package:opennutritracker/features/add_meal/domain/usecase/probe_ai_endpoint_usecase.dart';
 import 'package:opennutritracker/features/add_meal/domain/usecase/run_ai_endpoint_probe_usecase.dart';
+import 'package:opennutritracker/features/edit_meal/data/searxng_web_search.dart';
 import 'package:opennutritracker/features/settings/presentation/widgets/ai_consent_screen.dart';
 import 'package:opennutritracker/generated/l10n.dart';
 
@@ -50,11 +52,20 @@ class AiAssistDialog extends StatefulWidget {
   /// worse than none.
   final AiEndpointProbeRunner? probeRunner;
 
+  /// Carries the SearXNG check, so a test can answer without a network.
+  ///
+  /// Injected for the same reason [modelList] is, and null in tests that do
+  /// not exercise the web-search section. Null builds one over a client
+  /// this dialog owns and closes — and a dialog nobody checks in never
+  /// constructs a client at all.
+  final http.Client? searxngClient;
+
   const AiAssistDialog({
     super.key,
     required this.storage,
     this.modelList,
     this.probeRunner,
+    this.searxngClient,
   });
 
   /// Returns true when the stored state changed, so the caller can refresh
@@ -71,6 +82,7 @@ class AiAssistDialog extends StatefulWidget {
     AiCredentialStorage storage, {
     AiModelListApi? modelList,
     AiEndpointProbeRunner? probeRunner,
+    http.Client? searxngClient,
   }) => showDialog<bool>(
     context: context,
     barrierDismissible: false,
@@ -78,6 +90,7 @@ class AiAssistDialog extends StatefulWidget {
       storage: storage,
       modelList: modelList,
       probeRunner: probeRunner,
+      searxngClient: searxngClient,
     ),
   ).then((changed) => changed ?? false);
 
@@ -118,6 +131,35 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
   final _endpointController = TextEditingController();
   final _modelController = TextEditingController();
   final _scrollController = ScrollController();
+
+  /// The web-search fallback's address and optional proxy token. Global to
+  /// the feature rather than per provider, so they sit beside the provider
+  /// settings but are saved whatever the selector says.
+  final _searxngUrlController = TextEditingController();
+  final _searxngTokenController = TextEditingController();
+
+  /// A token is really stored, so the field gets a "saved" line instead of
+  /// the value — the same rule the API-key field follows.
+  bool _searxngHasToken = false;
+
+  /// What the last check said about the **typed** address, or null when no
+  /// check has run (or editing retired one). Editing resets it, for the
+  /// reason [_endpointChanged] retires the model-list sentence.
+  bool? _searxngReachable;
+  bool _searxngChecking = false;
+  String? _searxngError;
+
+  /// Any edit to the web-search fields, so OK is offered even when the
+  /// provider above them already has its key — the #979 shape, one section
+  /// down.
+  bool _searxngChanged = false;
+
+  /// Built lazily and only when [AiAssistDialog.searxngClient] was not
+  /// supplied, like [_ownedModelList].
+  http.Client? _ownedSearxngClient;
+
+  http.Client get _searxngClient =>
+      widget.searxngClient ?? (_ownedSearxngClient ??= http.Client());
 
   /// Watched so that finishing with the address is a moment the app can act
   /// on. See [_endpointCommitted] for why that moment and no other.
@@ -247,12 +289,15 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     _apiKeyController.dispose();
     _endpointController.dispose();
     _modelController.dispose();
+    _searxngUrlController.dispose();
+    _searxngTokenController.dispose();
     _scrollController.dispose();
     // Removed before the node goes, or tearing the dialog down unfocuses the
     // field and the listener answers by calling setState on a dead State.
     _endpointFocus.removeListener(_onEndpointFocusChanged);
     _endpointFocus.dispose();
     _ownedModelList?.close();
+    _ownedSearxngClient?.close();
     super.dispose();
   }
 
@@ -286,9 +331,18 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     // refuses independently of what this dialog is showing. #753.
     final provider = summary.provider ?? AiProvider.anthropic;
     final modelId = await widget.storage.readModel(provider: provider);
-    final thinking =
-        await widget.storage.readThinkingLevel(provider: provider) ??
-        AiReasoningEffort.high;
+    // The stored level, or the provider's default — and a stored level this
+    // destination does not accept reads as the default too, so the segmented
+    // control always shows a selection the API will actually take.
+    final thinkingLevels = AiReasoningEffort.forProvider(provider);
+    final storedThinking = await widget.storage.readThinkingLevel(
+      provider: provider,
+    );
+    final thinking = thinkingLevels.contains(storedThinking)
+        ? storedThinking!
+        : (thinkingLevels.isEmpty
+              ? AiReasoningEffort.high
+              : thinkingLevels.first);
     // Asked separately from `configured`, because for a server the user runs
     // they are different questions and only this one may mask a field.
     final hasKey = summary.provider == null
@@ -303,6 +357,11 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     // yet" over a request that is in flight, and offer a button that joins it
     // and looks like it did nothing.
     final running = widget.probeRunner?.current(provider);
+    // The web-search pair is feature-global, so it is read here once and
+    // rewritten on every provider switch with the same values — harmless,
+    // and it keeps this the one place that fills the dialog.
+    final searxngUrl = await widget.storage.readSearxngUrl();
+    final searxngHasToken = await widget.storage.readSearxngToken() != null;
     // A newer read has started since this one did, and it is reading the
     // provider the user actually chose. Dropping this snapshot loses nothing:
     // the newer one writes every field this one would have.
@@ -316,6 +375,8 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
       _thinking = thinking;
       _endpointController.text = summary.endpoint ?? '';
       _modelController.text = modelId ?? '';
+      _searxngUrlController.text = searxngUrl?.toString() ?? '';
+      _searxngHasToken = searxngHasToken;
       // The stored address counts as already asked-about, so returning to a
       // configured server and leaving the field alone is not a URL change.
       _lastEndpoint = summary.endpoint == null
@@ -566,6 +627,51 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     });
   }
 
+  /// Editing either web-search field retires whatever the last check
+  /// established about the old address — the same rule [_endpointChanged]
+  /// applies to verdicts about the own-server address — and makes OK
+  /// available, because a SearXNG edit is a change worth confirming even
+  /// when the provider above it already holds its key.
+  void _searxngEdited() => setState(() {
+    _searxngError = null;
+    _searxngReachable = null;
+    _searxngChanged = true;
+  });
+
+  /// Asks the typed address whether it answers JSON search — one request,
+  /// against the text in the field rather than the stored value, for the
+  /// same reason [_loadModels] asks the typed endpoint: a check that
+  /// passed is a save that will work.
+  ///
+  /// With the typed token only. The stored one is never read back into
+  /// the dialog — a credential is not readable off a screen someone else
+  /// can see — so a re-check against a proxied instance starts by typing
+  /// the token again or accepts that the check sends none; the runtime
+  /// search always sends the stored one.
+  Future<void> _checkSearxng() async {
+    final s = S.of(context);
+    final typed = _searxngUrlController.text.trim();
+    if (AiCredentialStorage.resolveSearxngUrl(typed) == null) {
+      setState(() => _searxngError = s.aiAssistSearxngInvalidUrlLabel);
+      return;
+    }
+    setState(() {
+      _searxngChecking = true;
+      _searxngError = null;
+    });
+    final typedToken = _searxngTokenController.text.trim();
+    final reachable = await SearxngWebSearch.reachable(
+      _searxngClient,
+      typed,
+      typedToken.isEmpty ? null : typedToken,
+    );
+    if (!mounted) return;
+    setState(() {
+      _searxngChecking = false;
+      _searxngReachable = reachable;
+    });
+  }
+
   /// Picking from the fetched list fills the field the user could have typed
   /// into, rather than writing straight to the store.
   ///
@@ -717,6 +823,30 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
       changed = true;
     }
 
+    // The web-search fallback's destination. Feature-global, so it saves
+    // whichever provider the selector landed on; an invalid address is
+    // refused on the field like the own-server one above rather than stored
+    // dead, and a **blanked** field is obeyed — the field opened holding
+    // the stored address, so empty now is the deliberate off-switch.
+    final searxngUrl = _searxngUrlController.text.trim();
+    if (searxngUrl.isNotEmpty &&
+        AiCredentialStorage.resolveSearxngUrl(searxngUrl) == null) {
+      setState(() => _searxngError = s.aiAssistSearxngInvalidUrlLabel);
+      return;
+    }
+    if (searxngUrl.isNotEmpty) {
+      await widget.storage.writeSearxngUrl(searxngUrl);
+      changed = true;
+    } else if (await widget.storage.readSearxngUrl() != null) {
+      await widget.storage.writeSearxngUrl('');
+      changed = true;
+    }
+    final searxngToken = _searxngTokenController.text.trim();
+    if (searxngToken.isNotEmpty) {
+      await widget.storage.writeSearxngToken(searxngToken);
+      changed = true;
+    }
+
     if (!mounted) return;
     Navigator.of(context).pop(changed);
   }
@@ -808,6 +938,7 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     AiProvider.openrouter => 'OpenRouter',
     AiProvider.openai => 'OpenAI',
     AiProvider.zai => 'Z.ai',
+    AiProvider.google => 'Google',
     // The only one that is not a brand, so the only one that is localized.
     // **Never "local"**: that word is simultaneously what the ecosystem calls
     // Ollama and what a user reads as *on my phone* — the claim reserved for
@@ -1029,7 +1160,9 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
                     // to send to; picking a model is the step after deciding
                     // you can talk to them at all.
                     _buildModelSection(context, s, theme),
-                    if (_provider == AiProvider.zai) ...[
+                    if (AiReasoningEffort.forProvider(
+                      _provider,
+                    ).isNotEmpty) ...[
                       const SizedBox(height: 16),
                       _buildThinkingSection(s, theme),
                     ],
@@ -1039,22 +1172,26 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
                     // those two fields would invite it to be read as a
                     // property of the provider.
                     //
-                    // For a server the user runs and for Z.ai. The hosted
-                    // three were screened behaviourally over live calls
-                    // before they were ever offered (#735), so there is
-                    // nothing a check would establish there that the curated
-                    // list does not already carry — and an inert "not checked
-                    // yet" on the Anthropic path would imply otherwise. Z.ai
-                    // is on the other side of that line exactly as a pulled
-                    // server is: its list is unscreened, the key is the whole
-                    // of what "configured" means, and the user asked for a
+                    // For a server the user runs, Z.ai and Google. The
+                    // hosted three were screened behaviourally over live
+                    // calls before they were ever offered (#735), so there
+                    // is nothing a check would establish there that the
+                    // curated list does not already carry — and an inert
+                    // "not checked yet" on the Anthropic path would imply
+                    // otherwise. Z.ai and Google are on the other side of
+                    // that line exactly as a pulled server is: their lists
+                    // are unscreened, the key is the whole of what
+                    // "configured" means, and the user asked for a
                     // confirmation that the combination actually answers.
                     if ((_provider == AiProvider.ownServer ||
-                            _provider == AiProvider.zai) &&
+                            _provider == AiProvider.zai ||
+                            _provider == AiProvider.google) &&
                         _configured) ...[
                       const SizedBox(height: 16),
                       _buildProbeSection(s, theme),
                     ],
+                    const SizedBox(height: 16),
+                    _buildSearxngSection(s, theme),
                     const SizedBox(height: 16),
                     // Provider paragraph first — it names the destination,
                     // which is the fact that changes — then the sentences that
@@ -1112,7 +1249,10 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
         // a model pick and the enabled toggle are also changes someone may
         // want to keep, and they are already written by the time they set it.
         if (!_loading &&
-            (!_hasKey || _provider == AiProvider.ownServer || _changed))
+            (!_hasKey ||
+                _provider == AiProvider.ownServer ||
+                _changed ||
+                _searxngChanged))
           Semantics(
             identifier: 'ai-assist-save-key',
             child: TextButton(onPressed: _save, child: Text(s.dialogOKLabel)),
@@ -1357,6 +1497,91 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
     ),
   );
 
+  /// The web-search fallback: where it searches, and whether that answers.
+  ///
+  /// Outside the provider choice on purpose — the web step runs whichever
+  /// model answers the scan, so its destination belongs to the feature
+  /// rather than to any one provider. A blank address is the off state; no
+  /// separate switch exists, because the fields above set the same rule:
+  /// supplying the thing the step needs is asking for it, and removing it
+  /// turns it off.
+  Widget _buildSearxngSection(S s, ThemeData theme) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _label(theme, s.aiAssistSearxngLabel),
+      Semantics(
+        identifier: 'ai-assist-searxng-url-field',
+        child: TextField(
+          controller: _searxngUrlController,
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          decoration: InputDecoration(
+            labelText: s.aiAssistSearxngUrlLabel,
+            // The base address of the instance; the app appends /search.
+            hintText: 'https://searxng.example.org',
+            errorText: _searxngError,
+            border: const OutlineInputBorder(),
+          ),
+          onChanged: (_) => _searxngEdited(),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Semantics(
+        identifier: 'ai-assist-searxng-token-field',
+        child: TextField(
+          controller: _searxngTokenController,
+          autocorrect: false,
+          enableSuggestions: false,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: s.aiAssistSearxngTokenLabel,
+            border: const OutlineInputBorder(),
+          ),
+          onChanged: (_) => _searxngEdited(),
+        ),
+      ),
+      if (_searxngHasToken)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            '${s.aiAssistSearxngTokenSavedLabel}  '
+            '${AiCredentialStorage.maskedPlaceholder}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      Semantics(
+        identifier: 'ai-assist-searxng-check',
+        child: TextButton.icon(
+          onPressed: _searxngChecking ? null : _checkSearxng,
+          icon: _searxngChecking
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.travel_explore_rounded),
+          label: Text(s.aiAssistSearxngCheckLabel),
+        ),
+      ),
+      if (_searxngReachable case final reachable?)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            reachable
+                ? s.aiAssistSearxngReachableLabel
+                : s.aiAssistSearxngUnreachableLabel,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: reachable
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.error,
+            ),
+          ),
+        ),
+      Text(s.aiAssistSearxngHelp, style: theme.textTheme.bodySmall),
+    ],
+  );
+
   /// The model list, or a single stated model where there is no choice.
   ///
   /// The direct path offers one model and says so rather than rendering a
@@ -1375,8 +1600,10 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
   /// OpenAI-served entries on the OpenRouter list — so the per-row branch
   /// below is reachable in production for the first time, and the grouped
   /// line is now the special case rather than the rule.
-  /// The GLM reasoning-effort picker. Z.ai only — the hosted three have no
-  /// such parameter and a server the user runs speaks for itself.
+  /// The reasoning-effort picker, for the providers whose API takes a
+  /// level — Z.ai (`low`/`high`/`max`) and Google (`low`/`medium`/`high`).
+  /// The hosted three have no such parameter and a server the user runs
+  /// speaks for itself.
   Widget _buildThinkingSection(S s, ThemeData theme) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1387,7 +1614,7 @@ class _AiAssistDialogState extends State<AiAssistDialog> {
         // wrapper carries only the stable handle for UI drivers.
         child: SegmentedButton<AiReasoningEffort>(
           segments: [
-            for (final effort in AiReasoningEffort.values)
+            for (final effort in AiReasoningEffort.forProvider(_provider))
               ButtonSegment(value: effort, label: Text(effort.name)),
           ],
           selected: {_thinking},

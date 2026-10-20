@@ -15,6 +15,12 @@ enum AiProvider {
   /// address with an API key as the credential.
   zai,
 
+  /// Google's Gemini models through the AI Studio API's OpenAI-compatible
+  /// endpoint, reached at a compiled-in address with an API key as the
+  /// credential. Free-tier keys work; a Google AI subscription adds nothing
+  /// here.
+  google,
+
   /// A server the user runs — Ollama, LM Studio, llama.cpp, vLLM — reached at
   /// an address they supply.
   ///
@@ -54,11 +60,13 @@ enum AiProvider {
 
 /// How hard a reasoning model is allowed to think before it answers.
 ///
-/// Exists for the GLM models, which cannot be asked *not* to think — the
-/// level is the only control, and an unset one reads as [high] rather than
-/// as "off". The enum name is persisted verbatim, like [AiProvider.name].
+/// Exists for the providers whose models take a level — GLM and Gemini —
+/// and an unset one reads as that provider's default (the first entry of
+/// [forProvider]) rather than as "off". The enum name is persisted
+/// verbatim, like [AiProvider.name].
 enum AiReasoningEffort {
   low,
+  medium,
   high,
   max;
 
@@ -69,6 +77,25 @@ enum AiReasoningEffort {
     }
     return null;
   }
+
+  /// The levels [provider]'s API accepts, ordered so the first is the
+  /// default. Z.ai has no `medium`; Gemini has no `max` — and a level the
+  /// destination rejects fails the whole request, so the dialog offers and
+  /// the factory sends only these.
+  static List<AiReasoningEffort> forProvider(AiProvider provider) =>
+      switch (provider) {
+        AiProvider.zai => const [
+          AiReasoningEffort.high,
+          AiReasoningEffort.low,
+          AiReasoningEffort.max,
+        ],
+        AiProvider.google => const [
+          AiReasoningEffort.medium,
+          AiReasoningEffort.low,
+          AiReasoningEffort.high,
+        ],
+        _ => const [],
+      };
 }
 
 /// Everything one request needs in order to be addressed: who is answering,
@@ -318,6 +345,14 @@ class AiCredentialStorage {
   /// The GLM reasoning-effort choice, per provider.
   static const _thinkingTag = 'AiThinkingTag';
 
+  /// Where the web-search fallback's SearXNG instance lives, and the token
+  /// a reverse proxy in front of it may demand. Feature-wide rather than
+  /// per provider: the web step runs whichever model answers the other
+  /// calls, and coupling it to a provider slot would lose it on every
+  /// provider switch.
+  static const _searxngUrlTag = 'AiSearxngUrlTag';
+  static const _searxngTokenTag = 'AiSearxngTokenTag';
+
   static String _thinkingSlotTag(AiProvider provider) =>
       '$_thinkingTag.${provider.name}';
 
@@ -463,10 +498,11 @@ class AiCredentialStorage {
           ) &&
           await _storage.read(key: _termsAcceptedTag) == 'true' &&
           await _storage.read(key: _enabledTag) != 'false';
-      // Only the GLM path consumes a level; reading the slot for the
-      // providers that cannot would be a platform round trip spent on
+      // Only the reasoning providers consume a level; reading the slot for
+      // the ones that cannot would be a platform round trip spent on
       // nothing, and the storage tests count these.
-      final reasoningEffort = target == AiProvider.zai
+      final reasoningEffort =
+          target == AiProvider.zai || target == AiProvider.google
           ? AiReasoningEffort.fromTag(
               await _storage.read(key: _thinkingSlotTag(target)),
             )
@@ -578,6 +614,99 @@ class AiCredentialStorage {
     );
   }
 
+  /// The SearXNG instance the web-search fallback asks, as a requestable
+  /// base address, or **null when what was typed cannot be requested at
+  /// all** — the same contract as [resolveEndpoint] for a different
+  /// protocol. SearXNG answers `/search?…&format=json`, so the app appends
+  /// that path to whatever base the user stored; the only rewriting here is
+  /// stripping a trailing slash and a pasted `/search` — a URL copied out
+  /// of the browser's address bar while configuring, query string and all,
+  /// is the ordinary way this address arrives.
+  ///
+  /// The scheme is not guessed here either, for the reason [resolveEndpoint]
+  /// gives: `http://` to a private host is a real configuration (a home
+  /// network), and picking plaintext on someone's behalf is the one thing
+  /// the request layer must not do silently. The per-request guard decides
+  /// what plaintext may leave the phone, not this validation.
+  static Uri? resolveSearxngUrl(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    if (uri.host.isEmpty) return null;
+    var path = uri.path.endsWith('/')
+        ? uri.path.substring(0, uri.path.length - 1)
+        : uri.path;
+    if (path.endsWith('/search')) {
+      path = path.substring(0, path.length - '/search'.length);
+    }
+    // Rebuilt rather than `replace(query: '', fragment: '')` — that keeps
+    // empty-but-present query and fragment flags, and the result would
+    // never equal the `Uri.parse` of its own `toString`. The port rides
+    // only when one was typed: the constructor writes an explicit 0 out.
+    final userInfo = uri.userInfo.isEmpty ? null : uri.userInfo;
+    if (uri.hasPort) {
+      return Uri(
+        scheme: uri.scheme,
+        userInfo: userInfo,
+        host: uri.host,
+        port: uri.port,
+        path: path,
+      );
+    }
+    return Uri(
+      scheme: uri.scheme,
+      userInfo: userInfo,
+      host: uri.host,
+      path: path,
+    );
+  }
+
+  /// The stored SearXNG base address, resolved, or null when none is
+  /// stored. Read at call time rather than cached, matching
+  /// [readApiKey]: nothing here should outlive the request it served.
+  Future<Uri?> readSearxngUrl() async {
+    final value = await _storage.read(key: _searxngUrlTag);
+    if (value == null || value.isEmpty) return null;
+    return resolveSearxngUrl(value);
+  }
+
+  /// Stores the SearXNG base address. Blank **clears the address and the
+  /// token together** — the one deliberate way to drop the configuration —
+  /// and an address that cannot be requested is refused (returns false,
+  /// stores nothing) rather than stored dead, for the reason
+  /// [writeEndpoint] refuses the same shape.
+  Future<bool> writeSearxngUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      await _storage.delete(key: _searxngUrlTag);
+      await _storage.delete(key: _searxngTokenTag);
+      return true;
+    }
+    final resolved = resolveSearxngUrl(trimmed);
+    if (resolved == null) return false;
+    await _storage.write(key: _searxngUrlTag, value: resolved.toString());
+    return true;
+  }
+
+  /// The token sent as a bearer to the SearXNG instance, or null. SearXNG
+  /// itself authenticates nobody — the token is for whatever sits in front
+  /// of a public instance (a reverse proxy), which is the ordinary way to
+  /// keep an open JSON endpoint off the open internet.
+  Future<String?> readSearxngToken() async {
+    final value = await _storage.read(key: _searxngTokenTag);
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  /// Stores the SearXNG token; blank clears it.
+  Future<void> writeSearxngToken(String token) async {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) {
+      await _storage.delete(key: _searxngTokenTag);
+      return;
+    }
+    await _storage.write(key: _searxngTokenTag, value: trimmed);
+  }
+
   /// The part of [endpoint] that names the destination, and **nothing else** —
   /// or null when there is no host in it to name.
   ///
@@ -649,7 +778,8 @@ class AiCredentialStorage {
     AiProvider.anthropic ||
     AiProvider.openrouter ||
     AiProvider.openai ||
-    AiProvider.zai => apiKey != null,
+    AiProvider.zai ||
+    AiProvider.google => apiKey != null,
     // **And the model**, which is where #738's "the model is part of what
     // configured means here" is finally enforced rather than asserted. The
     // three hosted providers fall back to a curated default; this one has no
@@ -1142,6 +1272,12 @@ class AiCredentialStorage {
     await _storage.delete(key: _providerTag);
     await _storage.delete(key: _enabledTag);
     await _storage.delete(key: _termsAcceptedTag);
+    // The SearXNG pair goes too: a wipe means "as before the app was ever
+    // configured", and the web-search fallback is as much a configured
+    // destination as a provider endpoint. A single-provider clear above
+    // deliberately keeps it — it is not that provider's credential.
+    await _storage.delete(key: _searxngUrlTag);
+    await _storage.delete(key: _searxngTokenTag);
   });
 
   /// The legacy tag is the Anthropic slot under an older name, so it is
